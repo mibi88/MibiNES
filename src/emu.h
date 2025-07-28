@@ -35,8 +35,33 @@
 #ifndef MN_EMU_H
 #define MN_EMU_H
 
+#include <cpu.h>
+#include <ppu.h>
+#include <apu.h>
+#include <mapper.h>
+
 typedef struct {
-    /* TODO */
+    MNCPU cpu;
+    MNPPU ppu;
+    MNAPU apu;
+    MNMapper mapper;
+
+    int pal;
 } MNEmu;
+
+enum {
+    MN_EMU_E_NONE,
+    MN_EMU_E_CPU,
+    MN_EMU_E_PPU,
+    MN_EMU_E_APU,
+    MN_EMU_E_MAPPER,
+
+    MN_EMU_E_AMOUNT
+};
+
+int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
+                unsigned char *rom, size_t size, int pal);
+
+void mn_emu_free(MNEmu *emu);
 
 #endif /* MN_EMU_H */

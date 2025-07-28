@@ -32,10 +32,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ppu.h>
+#ifndef MN_MAPPER_NROM_H
+#define MN_MAPPER_NROM_H
 
-int mn_ppu_init(MNPPU *ppu) {
-    /* TODO */
+#include <mapper.h>
 
-    return 0;
-}
+extern MNMapper mn_mapper_nrom;
+
+#endif

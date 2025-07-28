@@ -75,7 +75,7 @@ static unsigned long mn_gui_get_time(void) {
     return time.tv_nsec/(1e6)+time.tv_sec*1000;
 }
 
-int mn_gui_init(char *file) {
+int mn_gui_init(unsigned char *rom, size_t size) {
     XSetWindowAttributes attr;
 
     w = W;
@@ -86,7 +86,7 @@ int mn_gui_init(char *file) {
 
     last_time = mn_gui_get_time();
 
-    if(mn_emu_init(&emu, mn_gui_pixel)){
+    if(mn_emu_init(&emu, mn_gui_pixel, rom, size, 0)){
         return 1;
     }
 

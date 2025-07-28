@@ -33,3 +33,9 @@
  */
 
 #include <cpu.h>
+
+int mn_cpu_init(MNCPU *cpu) {
+    /* TODO */
+
+    return 0;
+}

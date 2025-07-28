@@ -32,10 +32,39 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ppu.h>
+#include <mapper.h>
 
-int mn_ppu_init(MNPPU *ppu) {
-    /* TODO */
+#include <mappers/nrom.h>
 
-    return 0;
+#define MN_MAPPER_AMOUNT 1
+
+static MNMapper *mn_mapper_list[MN_MAPPER_AMOUNT] = {
+    &mn_mapper_nrom
+};
+
+int mn_mapper_find(MNMapper *mapper, unsigned char *rom, size_t size) {
+    int id;
+
+    if(size < 16){
+        return MN_MAPPER_E_SIZE;
+    }
+
+    id = rom[6]>>4;
+    id |= rom[7]&0xF0;
+
+    if((rom[7]&((1<<2)|(1<<3))) == (1<<3)){
+        /* NES 2.0 */
+
+        /* TODO: Support NES 2.0 */
+    }
+
+    if(id >= MN_MAPPER_AMOUNT) return MN_MAPPER_E_UNKNOWN;
+
+    if(mn_mapper_list[id] != NULL){
+        *mapper = *mn_mapper_list[id];
+
+        return MN_MAPPER_E_NONE;
+    }
+
+    return MN_MAPPER_E_UNKNOWN;
 }

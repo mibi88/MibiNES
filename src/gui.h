@@ -35,7 +35,9 @@
 #ifndef MN_GUI_H
 #define MN_GUI_H
 
-int mn_gui_init(char *file);
+#include <stddef.h>
+
+int mn_gui_init(unsigned char *rom, size_t size);
 void mn_gui_pixel(long int color);
 void mn_gui_run(void);
 void mn_gui_free(void);

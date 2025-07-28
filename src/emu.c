@@ -34,10 +34,29 @@
 
 #include <emu.h>
 
-int mn_emu_init(MNEmu *emu, void draw_pixel(long int color)) {
-    /* TODO */
+int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
+                unsigned char *rom, size_t size, int pal) {
+    emu->pal = pal;
 
-    return 0;
+    if(mn_cpu_init(&emu->cpu)){
+        return MN_EMU_E_CPU;
+    }
+    if(mn_ppu_init(&emu->ppu)){
+        return MN_EMU_E_PPU;
+    }
+    if(mn_apu_init(&emu->apu)){
+        return MN_EMU_E_APU;
+    }
+
+    if(mn_mapper_find(&emu->mapper, rom, size)){
+        return MN_EMU_E_MAPPER;
+    }
+
+    if(emu->mapper.init(emu, &emu->mapper, rom, size)){
+        return MN_EMU_E_MAPPER;
+    }
+
+    return MN_EMU_E_NONE;
 }
 
 void mn_emu_step(MNEmu *emu) {

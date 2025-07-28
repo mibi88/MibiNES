@@ -32,10 +32,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ppu.h>
+#ifndef MN_APU_H
+#define MN_APU_H
 
-int mn_ppu_init(MNPPU *ppu) {
+typedef struct {
     /* TODO */
+} MNAPU;
 
-    return 0;
-}
+int mn_apu_init(MNAPU *apu);
+
+#endif

@@ -38,19 +38,50 @@
 #include <gui.h>
 
 int main(int argc, char **argv) {
+    FILE *fp;
+
+    unsigned char *rom;
+    size_t size;
+
     if(argc < 2){
         fprintf(stderr, "USAGE: %s [ROM]\nA small NES emulator\n", argv[0]);
 
         return EXIT_FAILURE;
     }
 
-    if(mn_gui_init(argv[1])){
+    fp = fopen(argv[1], "rb");
+    if(fp == NULL){
+        fprintf(stderr, "%s: Failed to load \"%s\"!\n", argv[0], argv[1]);
+
+        return EXIT_FAILURE;
+    }
+
+    fseek(fp, 0, SEEK_END);
+    size = ftell(fp);
+    rewind(fp);
+
+    rom = malloc(size);
+    if(rom == NULL){
+        fprintf(stderr, "%s: Failed to allocate %lu bytes!\n", argv[0], size);
+
+        return EXIT_FAILURE;
+    }
+
+    fread(rom, 1, size, fp);
+
+    if(mn_gui_init(rom, size)){
+        fprintf(stderr, "%s: Failed to initialize %s!\n", argv[0], argv[0]);
+
+        free(rom);
+
         return EXIT_FAILURE;
     }
 
     mn_gui_run();
 
     mn_gui_free();
+
+    free(rom);
 
     return EXIT_SUCCESS;
 }

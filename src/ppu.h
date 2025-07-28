@@ -39,4 +39,6 @@ typedef struct {
     /* TODO */
 } MNPPU;
 
+int mn_ppu_init(MNPPU *ppu);
+
 #endif /* MN_PPU_H */

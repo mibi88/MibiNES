@@ -32,9 +32,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ppu.h>
+#include <apu.h>
 
-int mn_ppu_init(MNPPU *ppu) {
+int mn_apu_init(MNAPU *apu) {
     /* TODO */
 
     return 0;

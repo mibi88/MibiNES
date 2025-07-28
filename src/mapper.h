@@ -32,10 +32,27 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ppu.h>
+#ifndef MN_MAPPER_H
+#define MN_MAPPER_H
 
-int mn_ppu_init(MNPPU *ppu) {
-    /* TODO */
+#include <stddef.h>
 
-    return 0;
-}
+typedef struct {
+    int (*init)(void *_emu, void *_mapper, unsigned char *rom, size_t size);
+    unsigned char (*read)(void *_emu, void *_mapper, unsigned int addr);
+    void (*write)(void *_emu, void *_mapper, unsigned int addr);
+    void (*reset)(void *_emu, void *_mapper);
+    void (*hard_reset)(void *_emu, void *_mapper);
+
+    void *data;
+} MNMapper;
+
+enum {
+    MN_MAPPER_E_NONE,
+    MN_MAPPER_E_SIZE,
+    MN_MAPPER_E_UNKNOWN,
+
+    MN_MAPPER_E_AMOUNT
+};
+
+#endif

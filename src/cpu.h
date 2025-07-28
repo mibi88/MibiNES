@@ -39,4 +39,6 @@ typedef struct {
     /* TODO */
 } MNCPU;
 
+int mn_cpu_init(MNCPU *cpu);
+
 #endif /* MN_CPU_H */

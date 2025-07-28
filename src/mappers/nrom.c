@@ -32,10 +32,39 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ppu.h>
+#include <mappers/nrom.h>
 
-int mn_ppu_init(MNPPU *ppu) {
+static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
+                        size_t size) {
     /* TODO */
 
     return 0;
 }
+
+static unsigned char mn_nrom_read(void *_emu, void *_mapper,
+                                  unsigned int addr) {
+    /* TODO */
+
+    return 0;
+}
+
+static void mn_nrom_write(void *_emu, void *_mapper, unsigned int addr) {
+    /* TODO */
+}
+
+static void mn_nrom_reset(void *_emu, void *_mapper) {
+    /* TODO */
+}
+
+static void mn_nrom_hard_reset(void *_emu, void *_mapper) {
+    /* TODO */
+}
+
+MNMapper mn_mapper_nrom = {
+    mn_nrom_init,
+    mn_nrom_read,
+    mn_nrom_write,
+    mn_nrom_reset,
+    mn_nrom_hard_reset,
+    NULL
+};
