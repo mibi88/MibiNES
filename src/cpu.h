@@ -35,8 +35,32 @@
 #ifndef MN_CPU_H
 #define MN_CPU_H
 
+/* Flags */
+enum {
+    MN_CPU_C = 1,
+    MN_CPU_Z = (1<<1),
+    MN_CPU_I = (1<<2),
+    MN_CPU_D = (1<<3),
+    MN_CPU_B = (1<<4),
+    MN_CPU_V = (1<<6),
+    MN_CPU_N = (1<<7)
+};
+
 typedef struct {
+    /* Registers */
     unsigned short int pc;
+    unsigned char s;
+    unsigned char p;
+    unsigned char a;
+    unsigned char x;
+    unsigned char y;
+
+    unsigned char cycle;
+    unsigned char target_cycle;
+
+    unsigned char opcode, t;
+
+    int jammed;
 } MNCPU;
 
 int mn_cpu_init(MNCPU *cpu);

@@ -34,11 +34,73 @@
 
 #include <cpu.h>
 
+#include <emu.h>
+
 int mn_cpu_init(MNCPU *cpu) {
-    /* TODO */
-    (void)cpu;
+    cpu->pc = 0x8000;
+    cpu->jammed = 0;
+
+    cpu->cycle = 1;
+    cpu->target_cycle = 0;
 
     return 0;
+}
+
+/* TODO: Put all structs that read RAM in emu.h to avoid using void
+ * pointers. */
+void mn_cpu_cycle(MNCPU *cpu, void *_emu) {
+    /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
+
+    MNEmu *emu = _emu;
+
+    if(cpu->jammed) return;
+
+    if(cpu->cycle > cpu->target_cycle){
+        cpu->opcode = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+        cpu->pc++;
+        cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+        cpu->cycle = 2;
+    }
+
+    switch(cpu->opcode){
+        case 0x00:
+            /* BRK */
+            switch(cpu->cycle){
+                case 2:
+                    cpu->target_cycle = 7;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
+                                      cpu->pc>>8);
+                    cpu->s--;
+                    cpu->p |= MN_CPU_B;
+                    break;
+                case 4:
+                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
+                                      cpu->pc);
+                    cpu->s--;
+                    break;
+                case 5:
+                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
+                                      cpu->p);
+                    cpu->s--;
+                    break;
+                case 6:
+                    cpu->pc &= 0xFF00;
+                    cpu->pc |= emu->mapper.read(emu, &emu->mapper, 0xFFFE);
+                    break;
+                case 7:
+                    cpu->pc |= emu->mapper.read(emu, &emu->mapper, 0xFFFF)<<8;
+                    break;
+            }
+            break;
+        default:
+            /* Unknown opcode, jam the CPU for now */
+            cpu->jammed = 1;
+    }
+
+    cpu->cycle++;
 }
 
 void mn_cpu_free(MNCPU *cpu) {
