@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # mibines - A small NES emulator.
 # by Mibi88
@@ -40,8 +40,25 @@ l=()
 builddir=build
 cc=cc
 srcdir=src
-cflags=(-ansi -Wall -Wextra -Wpedantic -I$srcdir -O0)
+cflags=(-ansi -Wall -Wextra -Wpedantic -I$srcdir)
 ldflags=(-lX11)
+
+debug=false
+
+while getopts "d" flag; do
+    case "${flag}" in
+        d) debug=true ;;
+    esac
+done
+
+if [ $debug = true ]; then
+    echo "-- Debug build..."
+    cflags+=(-O0)
+else
+    echo "-- Release build..."
+    cflags+=(-Ofast)
+    ldflags+=(-flto=auto)
+fi
 
 out=$builddir/main
 

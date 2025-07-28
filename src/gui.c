@@ -37,6 +37,7 @@
 #include <emu.h>
 
 #define _XOPEN_SOURCE 600
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,24 +54,56 @@ static Window window;
 static XEvent event;
 static Atom wm_delete;
 static GC gc;
+static XVisualInfo info;
+
+static char *back_buffer;
+static XImage *back_buffer_image;
 
 static MNEmu emu;
 
 static int x, y;
 static int w, h;
 
+static int needs_resize;
+static int nw, nh;
+
+static unsigned long int last_time;
+
+static unsigned long mn_gui_get_time(void) {
+    struct timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
+    return time.tv_nsec/(1e6)+time.tv_sec*1000;
+}
+
 int mn_gui_init(char *file) {
-    XVisualInfo info;
     XSetWindowAttributes attr;
+
+    w = W;
+    h = H;
+    nw = w;
+    nh = h;
+    needs_resize = 0;
+
+    last_time = mn_gui_get_time();
 
     if(mn_emu_init(&emu, mn_gui_pixel)){
         return 1;
+    }
+
+    back_buffer = malloc(W*H*4);
+    if(back_buffer == NULL){
+        mn_emu_free(&emu);
+
+        return 2;
     }
 
     memset(&info, 0, sizeof(XVisualInfo));
 
     display = XOpenDisplay(NULL);
     if(display == NULL){
+        mn_emu_free(&emu);
+        free(back_buffer);
+
         return 2;
     }
 
@@ -78,6 +111,10 @@ int mn_gui_init(char *file) {
 
     if(!XMatchVisualInfo(display, DefaultScreen(display), 24, TrueColor,
                          &info)){
+        mn_emu_free(&emu);
+        free(back_buffer);
+        XCloseDisplay(display);
+
         return 3;
     }
 
@@ -85,7 +122,7 @@ int mn_gui_init(char *file) {
     attr.colormap = XCreateColormap(display, root, info.visual, AllocNone);
 
     window = XCreateWindow(display, root, 0, 0, W, H, 0, info.depth,
-                           InputOutput, info.visual, CWColormap,
+                           InputOutput, info.visual, CWBackPixel | CWColormap,
                            &attr);
 
     /* TODO: Error handling */
@@ -105,6 +142,9 @@ int mn_gui_init(char *file) {
 
     gc = DefaultGC(display, DefaultScreen(display));
 
+    back_buffer_image = XCreateImage(display, info.visual, info.depth, ZPixmap,
+                                     0, back_buffer, W, H, 4*8, 0);
+
     x = 0;
     y = 0;
 
@@ -122,12 +162,96 @@ static int mn_gui_get_next_event(void) {
     return 0;
 }
 
+static void mn_gui_update(void) {
+    unsigned long int new_time;
+    unsigned long int ms;
+
+    if(back_buffer != NULL){
+        XPutImage(display, window, gc, back_buffer_image, 0, 0, 0, 0, w, h);
+    }
+
+    if(needs_resize){
+        /* NOTE: XDestroyImage also frees back_buffer. */
+        if(back_buffer != NULL) XDestroyImage(back_buffer_image);
+        back_buffer = malloc(nw*nh*4);
+        if(back_buffer != NULL){
+            back_buffer_image = XCreateImage(display, info.visual, info.depth,
+                                             ZPixmap, 0, back_buffer, nw, nh,
+                                             4*8, 0);
+        }
+
+        w = nw;
+        h = nh;
+
+        needs_resize = 0;
+    }
+
+    new_time = mn_gui_get_time();
+    ms = new_time-last_time;
+    if(new_time < last_time) ms = 1;
+    last_time = new_time;
+
+    printf("\033[2Kms: %lu\r", ms);
+    fflush(stdout);
+
+    XFlush(display);
+}
+
+static void mn_gui_rect(int x, int y, int rw, int rh, long int color) {
+    int px, py;
+    char *p;
+    size_t d;
+
+    char r = *((unsigned char*)&color);
+    char g = ((unsigned char*)&color)[1];
+    char b = ((unsigned char*)&color)[2];
+
+    if(back_buffer == NULL){
+        /* Fallback on error */
+        XSetForeground(display, gc, color);
+        XFillRectangle(display, window, gc, x, y, rw, rh);
+    }else{
+        if(x < 0){
+            rw += x;
+            x = 0;
+        }
+        if(y < 0){
+            rh += y;
+            y = 0;
+        }
+        if(x+rw > w){
+            rw = w-x-1;
+        }
+        if(rw < 0 || x >= w){
+            return;
+        }
+        if(y+rh > h){
+            rh = h-y-1;
+        }
+        if(rh < 0 || y >= h){
+            return;
+        }
+
+        p = back_buffer+(y*w+x)*4;
+        d = (w-rw)*4;
+        for(py=y;py<y+rh;py++){
+            for(px=x;px<x+rw;px++){
+                *(p++) = r;
+                *(p++) = g;
+                *(p++) = b;
+                *(p++) = 0;
+            }
+            p += d;
+        }
+    }
+}
+
 void mn_gui_pixel(long int color) {
-    XSetForeground(display, gc, color);
     /* HACK: I had to add 1 to the width and height to avoid having a black
      * grid */
-    XFillRectangle(display, window, gc, x*w/W, y*h/H, (w/W > 0 ? w/W : 1)+1,
-                   (h/H > 0 ? h/H : 1)+1);
+    mn_gui_rect(x*w/W, y*h/H, (w/W > 0 ? w/W : 1)+1, (h/H > 0 ? h/H : 1)+1,
+                color);
+
     x++;
     if(x >= W){
         x = 0;
@@ -135,7 +259,7 @@ void mn_gui_pixel(long int color) {
         if(y >= H){
             y = 0;
 
-            XFlush(display);
+            mn_gui_update();
         }
     }
 }
@@ -150,8 +274,9 @@ void mn_gui_run(void) {
             }
             if(event.type == Expose){
                 XGetWindowAttributes(display, window, &win_attr);
-                w = win_attr.width;
-                h = win_attr.height;
+                nw = win_attr.width;
+                nh = win_attr.height;
+                needs_resize = 1;
             }
         }
 

@@ -35,5 +35,8 @@
 #ifndef MN_CPU_H
 #define MN_CPU_H
 
+typedef struct {
+    /* TODO */
+} MNCPU;
 
 #endif /* MN_CPU_H */

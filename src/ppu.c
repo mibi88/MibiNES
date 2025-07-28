@@ -32,11 +32,4 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MN_EMU_H
-#define MN_EMU_H
-
-typedef struct {
-    /* TODO */
-} MNEmu;
-
-#endif /* MN_EMU_H */
+#include <ppu.h>
