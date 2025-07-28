@@ -68,3 +68,25 @@ int mn_mapper_find(MNMapper *mapper, unsigned char *rom, size_t size) {
 
     return MN_MAPPER_E_UNKNOWN;
 }
+
+unsigned long int mn_mapper_rand(unsigned long int *seed) {
+    /* Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs" */
+    *seed ^= *seed << 13;
+	*seed ^= *seed >> 17;
+	*seed ^= *seed << 5;
+
+	/* It's made for 32-bit integers */
+	*seed &= 0xFFFFFFFF;
+    return *seed;
+}
+
+void mn_mapper_ram_init(unsigned char *buffer, size_t size) {
+    size_t i;
+
+    /* TODO: Use the current time instead */
+    unsigned long int seed = 1;
+
+    for(i=0;i<size;i++){
+        buffer[i] = mn_mapper_rand(&seed);
+    }
+}

@@ -39,10 +39,12 @@
 
 typedef struct {
     int (*init)(void *_emu, void *_mapper, unsigned char *rom, size_t size);
-    unsigned char (*read)(void *_emu, void *_mapper, unsigned int addr);
-    void (*write)(void *_emu, void *_mapper, unsigned int addr);
+    unsigned char (*read)(void *_emu, void *_mapper, unsigned short int addr);
+    void (*write)(void *_emu, void *_mapper, unsigned short int addr,
+                  unsigned char value);
     void (*reset)(void *_emu, void *_mapper);
     void (*hard_reset)(void *_emu, void *_mapper);
+    void (*free)(void *_emu, void *_mapper);
 
     void *data;
 } MNMapper;
@@ -55,4 +57,8 @@ enum {
     MN_MAPPER_E_AMOUNT
 };
 
-#endif
+int mn_mapper_find(MNMapper *mapper, unsigned char *rom, size_t size);
+unsigned long int mn_mapper_rand(unsigned long int *seed);
+void mn_mapper_ram_init(unsigned char *buffer, size_t size);
+
+#endif /* MN_MAPPER_H */

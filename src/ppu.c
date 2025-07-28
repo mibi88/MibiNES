@@ -34,8 +34,14 @@
 
 #include <ppu.h>
 
-int mn_ppu_init(MNPPU *ppu) {
+int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color)) {
     /* TODO */
+    ppu->draw_pixel = draw_pixel;
 
     return 0;
+}
+
+void mn_ppu_free(MNPPU *ppu) {
+    /* TODO */
+    (void)ppu;
 }

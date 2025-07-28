@@ -36,9 +36,10 @@
 #define MN_CPU_H
 
 typedef struct {
-    /* TODO */
+    unsigned short int pc;
 } MNCPU;
 
 int mn_cpu_init(MNCPU *cpu);
+void mn_cpu_free(MNCPU *cpu);
 
 #endif /* MN_CPU_H */

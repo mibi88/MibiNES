@@ -34,30 +34,130 @@
 
 #include <mappers/nrom.h>
 
+#include <emu.h>
+
+#include <stdlib.h>
+
+#define MN_NROM_RAM_SIZE 0x800
+
+typedef struct {
+    unsigned char ram[MN_NROM_RAM_SIZE];
+    unsigned char *rom;
+    size_t size;
+    size_t prg_rom_start;
+    size_t prg_rom_size;
+    size_t chr_rom_size;
+    unsigned char last_read;
+
+    unsigned int chr_ram : 1;
+} MNNROM;
+
 static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
                         size_t size) {
-    /* TODO */
+    MNNROM *nrom = ((MNMapper*)_mapper)->data;
+    MNEmu *emu = _emu;
+
+    nrom = malloc(sizeof(MNNROM));
+
+    if(nrom == NULL) return 1;
+
+    mn_mapper_ram_init(nrom->ram, MN_NROM_RAM_SIZE);
+    nrom->rom = rom;
+    nrom->size = size;
+
+    nrom->prg_rom_start = 16;
+
+    /* NOTE: We have already checked that rom contains at least 16 bytes when
+     * searching the mapper. */
+
+    if(rom[6]&(1<<2)){
+        /* This ROM has a trainer */
+        nrom->prg_rom_start += 512;
+    }
+
+    nrom->prg_rom_size = rom[4]*16*1024;
+
+    if(!rom[5]){
+        nrom->chr_ram = 1;
+        nrom->chr_rom_size = 0;
+    }else{
+        nrom->chr_rom_size = rom[5]*8*1024;
+    }
+
+    if(size < nrom->prg_rom_start+nrom->prg_rom_size+nrom->chr_rom_size){
+        /* The ROM file is too small */
+        return 1;
+    }
+
+    emu->cpu.pc = 0x8000;
 
     return 0;
 }
 
 static unsigned char mn_nrom_read(void *_emu, void *_mapper,
-                                  unsigned int addr) {
-    /* TODO */
+                                  unsigned short int addr) {
+    MNNROM *rom = ((MNMapper*)_mapper)->data;
+    (void)_emu;
 
-    return 0;
+    if(addr >= 0x8000){
+        return (rom->last_read = rom->rom[rom->prg_rom_start+(addr-0x8000)%
+                                          rom->prg_rom_size]);
+    }else if(addr < 0x0800){
+        return (rom->last_read = rom->ram[addr]);
+    }else if(addr < 0x2000){
+        return (rom->last_read = rom->ram[addr%0x0800]);
+    }else if(addr < 0x4000){
+        /* TODO: Read from the PPU. The register is addr&7. */
+    }else if(addr < 0x4018){
+        /* TODO: Read from the APU. */
+    }else if(addr < 0x4020){
+        /* CPU test mode. */
+    }
+
+    /* Unmapped space */
+    return rom->last_read;
 }
 
-static void mn_nrom_write(void *_emu, void *_mapper, unsigned int addr) {
-    /* TODO */
+static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
+                          unsigned char value) {
+    MNNROM *rom = ((MNMapper*)_mapper)->data;
+    (void)_emu;
+
+    if(addr < 0x0800){
+        rom->ram[addr] = value;
+    }else if(addr < 0x2000){
+        rom->ram[addr%0x0800] = value;
+    }else if(addr < 0x4000){
+        /* TODO: Write to the PPU. The register is addr&7. */
+    }else if(addr < 0x4018){
+        /* TODO: Write to the APU. */
+    }else if(addr < 0x4020){
+        /* CPU test mode. */
+    }
+
+    /* Unmapped space */
 }
 
 static void mn_nrom_reset(void *_emu, void *_mapper) {
     /* TODO */
+    MNEmu *emu = _emu;
+    (void)_mapper;
+
+    emu->cpu.pc = 0x8000;
 }
 
 static void mn_nrom_hard_reset(void *_emu, void *_mapper) {
     /* TODO */
+    MNEmu *emu = _emu;
+    (void)_mapper;
+
+    emu->cpu.pc = 0x8000;
+}
+
+void mn_nrom_free(void *_emu, void *_mapper) {
+    MNNROM *rom = ((MNMapper*)_mapper)->data;
+    (void)_emu;
+    free(rom);
 }
 
 MNMapper mn_mapper_nrom = {
@@ -66,5 +166,6 @@ MNMapper mn_mapper_nrom = {
     mn_nrom_write,
     mn_nrom_reset,
     mn_nrom_hard_reset,
+    mn_nrom_free,
     NULL
 };

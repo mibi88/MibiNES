@@ -36,6 +36,12 @@
 
 int mn_cpu_init(MNCPU *cpu) {
     /* TODO */
+    (void)cpu;
 
     return 0;
+}
+
+void mn_cpu_free(MNCPU *cpu) {
+    /* TODO */
+    (void)cpu;
 }

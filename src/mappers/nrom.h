@@ -39,4 +39,4 @@
 
 extern MNMapper mn_mapper_nrom;
 
-#endif
+#endif /* MN_MAPPER_NROM_H */

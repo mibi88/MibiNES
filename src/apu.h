@@ -35,10 +35,15 @@
 #ifndef MN_APU_H
 #define MN_APU_H
 
+#include <stddef.h>
+
 typedef struct {
     /* TODO */
+
+    size_t channel_num;
 } MNAPU;
 
 int mn_apu_init(MNAPU *apu);
+void mn_apu_free(MNAPU *apu);
 
-#endif
+#endif /* MN_APU_H */

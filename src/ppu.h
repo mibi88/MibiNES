@@ -36,9 +36,13 @@
 #define MN_PPU_H
 
 typedef struct {
-    /* TODO */
+    unsigned char io_bus;
+    unsigned char video_mem_bus;
+
+    void (*draw_pixel)(long int color);
 } MNPPU;
 
-int mn_ppu_init(MNPPU *ppu);
+int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color));
+void mn_ppu_free(MNPPU *ppu);
 
 #endif /* MN_PPU_H */

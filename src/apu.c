@@ -36,6 +36,12 @@
 
 int mn_apu_init(MNAPU *apu) {
     /* TODO */
+    (void)apu;
 
     return 0;
+}
+
+void mn_apu_free(MNAPU *apu) {
+    /* TODO */
+    (void)apu;
 }

@@ -41,7 +41,7 @@ int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
     if(mn_cpu_init(&emu->cpu)){
         return MN_EMU_E_CPU;
     }
-    if(mn_ppu_init(&emu->ppu)){
+    if(mn_ppu_init(&emu->ppu, draw_pixel)){
         return MN_EMU_E_PPU;
     }
     if(mn_apu_init(&emu->apu)){
@@ -61,28 +61,37 @@ int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
 
 void mn_emu_step(MNEmu *emu) {
     /* TODO */
+    (void)emu;
 }
 
 void mn_emu_cycle(MNEmu *emu) {
     /* TODO: Perform the right number of steps */
+    (void)emu;
 }
 
 void mn_emu_pixel(MNEmu *emu) {
     /* TODO: Perform the right number of steps */
+    (void)emu;
 }
 
 void mn_emu_step_into(MNEmu *emu) {
     /* TODO: Perform the right number of steps */
+    (void)emu;
 }
 
 void mn_emu_step_over(MNEmu *emu) {
     /* TODO: Perform the right number of steps */
+    (void)emu;
 }
 
 void mn_emu_step_out(MNEmu *emu) {
     /* TODO: Perform the right number of steps */
+    (void)emu;
 }
 
 void mn_emu_free(MNEmu *emu) {
-    /* TODO */
+    emu->mapper.free(emu, &emu->mapper);
+    mn_cpu_free(&emu->cpu);
+    mn_ppu_free(&emu->ppu);
+    mn_apu_free(&emu->apu);
 }
