@@ -34,8 +34,6 @@
 
 #include <cpu.h>
 
-#include <emu.h>
-
 int mn_cpu_init(MNCPU *cpu) {
     cpu->pc = 0x8000;
     cpu->jammed = 0;
@@ -46,12 +44,8 @@ int mn_cpu_init(MNCPU *cpu) {
     return 0;
 }
 
-/* TODO: Put all structs that read RAM in emu.h to avoid using void
- * pointers. */
-void mn_cpu_cycle(MNCPU *cpu, void *_emu) {
+void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
-
-    MNEmu *emu = _emu;
 
     if(cpu->jammed) return;
 

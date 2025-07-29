@@ -37,11 +37,7 @@
 
 #include <stddef.h>
 
-typedef struct {
-    /* TODO */
-
-    size_t channel_num;
-} MNAPU;
+#include <emu.h>
 
 int mn_apu_init(MNAPU *apu);
 void mn_apu_free(MNAPU *apu);

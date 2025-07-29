@@ -34,6 +34,10 @@
 
 #include <emu.h>
 
+#include <cpu.h>
+#include <ppu.h>
+#include <apu.h>
+
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
                 unsigned char *rom, size_t size, int pal) {
     emu->pal = pal;
@@ -60,8 +64,7 @@ int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
 }
 
 void mn_emu_step(MNEmu *emu) {
-    /* TODO */
-    (void)emu;
+    mn_ppu_cycle(&emu->ppu, emu);
 }
 
 void mn_emu_cycle(MNEmu *emu) {
@@ -70,7 +73,7 @@ void mn_emu_cycle(MNEmu *emu) {
 }
 
 void mn_emu_pixel(MNEmu *emu) {
-    /* TODO: Perform the right number of steps */
+    mn_emu_step(emu);
     (void)emu;
 }
 

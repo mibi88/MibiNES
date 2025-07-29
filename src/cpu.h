@@ -35,6 +35,8 @@
 #ifndef MN_CPU_H
 #define MN_CPU_H
 
+#include <emu.h>
+
 /* Flags */
 enum {
     MN_CPU_C = 1,
@@ -46,24 +48,8 @@ enum {
     MN_CPU_N = (1<<7)
 };
 
-typedef struct {
-    /* Registers */
-    unsigned short int pc;
-    unsigned char s;
-    unsigned char p;
-    unsigned char a;
-    unsigned char x;
-    unsigned char y;
-
-    unsigned char cycle;
-    unsigned char target_cycle;
-
-    unsigned char opcode, t;
-
-    int jammed;
-} MNCPU;
-
 int mn_cpu_init(MNCPU *cpu);
+void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu);
 void mn_cpu_free(MNCPU *cpu);
 
 #endif /* MN_CPU_H */

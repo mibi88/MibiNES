@@ -35,10 +35,39 @@
 #ifndef MN_EMU_H
 #define MN_EMU_H
 
-#include <cpu.h>
-#include <ppu.h>
-#include <apu.h>
 #include <mapper.h>
+
+typedef struct {
+    /* Registers */
+    unsigned short int pc;
+    unsigned char s;
+    unsigned char p;
+    unsigned char a;
+    unsigned char x;
+    unsigned char y;
+
+    unsigned char cycle;
+    unsigned char target_cycle;
+
+    unsigned char opcode, t;
+
+    int jammed;
+} MNCPU;
+
+typedef struct {
+    unsigned char io_bus;
+    unsigned char video_mem_bus;
+
+    unsigned char cycle;
+
+    void (*draw_pixel)(long int color);
+} MNPPU;
+
+typedef struct {
+    /* TODO */
+
+    size_t channel_num;
+} MNAPU;
 
 typedef struct {
     MNCPU cpu;

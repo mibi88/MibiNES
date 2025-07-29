@@ -265,6 +265,8 @@ void mn_gui_pixel(long int color) {
 }
 
 void mn_gui_run(void) {
+    size_t i;
+
     int message = 0;
 
     XWindowAttributes win_attr;
@@ -280,13 +282,15 @@ void mn_gui_run(void) {
                 nh = win_attr.height;
                 needs_resize = 1;
             }
+        }else{
+            for(i=0;i<W*H;i++){
+                if(emu.cpu.jammed && !message){
+                    fputs("CPU jammed!\n", stderr);
+                    message = 1;
+                }
+                mn_gui_pixel(rand()&0xFFFFFF);
+            }
         }
-
-        if(emu.cpu.jammed && !message){
-            fputs("CPU jammed!\n", stderr);
-            message = 1;
-        }
-        mn_gui_pixel(rand()&0xFFFFFF);
     }
 }
 

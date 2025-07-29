@@ -34,11 +34,25 @@
 
 #include <ppu.h>
 
+#include <cpu.h>
+
 int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color)) {
     /* TODO */
     ppu->draw_pixel = draw_pixel;
+    ppu->cycle = 0;
 
     return 0;
+}
+
+void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
+    /* TODO */
+    if(ppu->cycle >= 3){
+        mn_cpu_cycle(&emu->cpu, emu);
+    }
+
+    ppu->draw_pixel(0xAAAAAA);
+
+    ppu->cycle++;
 }
 
 void mn_ppu_free(MNPPU *ppu) {

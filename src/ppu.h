@@ -35,14 +35,10 @@
 #ifndef MN_PPU_H
 #define MN_PPU_H
 
-typedef struct {
-    unsigned char io_bus;
-    unsigned char video_mem_bus;
-
-    void (*draw_pixel)(long int color);
-} MNPPU;
+#include <emu.h>
 
 int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color));
+void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu);
 void mn_ppu_free(MNPPU *ppu);
 
 #endif /* MN_PPU_H */
