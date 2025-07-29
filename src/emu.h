@@ -90,7 +90,7 @@ enum {
 
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
                 unsigned char *rom, size_t size, int pal);
-
+void mn_emu_pixel(MNEmu *emu);
 void mn_emu_free(MNEmu *emu);
 
 #endif /* MN_EMU_H */

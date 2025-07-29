@@ -48,6 +48,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     /* TODO */
     if(ppu->cycle >= 3){
         mn_cpu_cycle(&emu->cpu, emu);
+        ppu->cycle = 0;
     }
 
     ppu->draw_pixel(0xAAAAAA);

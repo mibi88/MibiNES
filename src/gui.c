@@ -104,7 +104,7 @@ int mn_gui_init(unsigned char *rom, size_t size) {
         mn_emu_free(&emu);
         free(back_buffer);
 
-        return 2;
+        return 3;
     }
 
     root = DefaultRootWindow(display);
@@ -115,7 +115,7 @@ int mn_gui_init(unsigned char *rom, size_t size) {
         free(back_buffer);
         XCloseDisplay(display);
 
-        return 3;
+        return 4;
     }
 
     attr.background_pixel = 0;
@@ -186,9 +186,13 @@ static void mn_gui_update(void) {
         needs_resize = 0;
     }
 
-    new_time = mn_gui_get_time();
-    ms = new_time-last_time;
-    if(new_time < last_time) ms = 1;
+    /* Cap it at 16 ms */
+    do{
+        new_time = mn_gui_get_time();
+        ms = new_time-last_time;
+        if(new_time < last_time) ms = 1;
+    }while(ms < 16);
+
     last_time = new_time;
 
     printf("\033[2Kms: %lu\r", ms);
@@ -284,11 +288,11 @@ void mn_gui_run(void) {
             }
         }else{
             for(i=0;i<W*H;i++){
+                mn_emu_pixel(&emu);
                 if(emu.cpu.jammed && !message){
                     fputs("CPU jammed!\n", stderr);
                     message = 1;
                 }
-                mn_gui_pixel(rand()&0xFFFFFF);
             }
         }
     }

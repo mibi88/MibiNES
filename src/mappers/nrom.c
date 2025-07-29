@@ -47,17 +47,18 @@ typedef struct {
     size_t prg_rom_start;
     size_t prg_rom_size;
     size_t chr_rom_size;
-    unsigned char last_read;
+    unsigned char bus;
 
     unsigned int chr_ram : 1;
 } MNNROM;
 
 static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
                         size_t size) {
-    MNNROM *nrom = ((MNMapper*)_mapper)->data;
+    MNNROM *nrom;
     MNEmu *emu = _emu;
 
-    nrom = malloc(sizeof(MNNROM));
+    ((MNMapper*)_mapper)->data = malloc(sizeof(MNNROM));
+    nrom = ((MNMapper*)_mapper)->data;
 
     if(nrom == NULL) return 1;
 
@@ -100,12 +101,12 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
     (void)_emu;
 
     if(addr >= 0x8000){
-        return (rom->last_read = rom->rom[rom->prg_rom_start+(addr-0x8000)%
+        return (rom->bus = rom->rom[rom->prg_rom_start+(addr-0x8000)%
                                           rom->prg_rom_size]);
     }else if(addr < 0x0800){
-        return (rom->last_read = rom->ram[addr]);
+        return (rom->bus = rom->ram[addr]);
     }else if(addr < 0x2000){
-        return (rom->last_read = rom->ram[addr%0x0800]);
+        return (rom->bus = rom->ram[addr%0x0800]);
     }else if(addr < 0x4000){
         /* TODO: Read from the PPU. The register is addr&7. */
     }else if(addr < 0x4018){
@@ -115,7 +116,7 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
     }
 
     /* Unmapped space */
-    return rom->last_read;
+    return rom->bus;
 }
 
 static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
@@ -125,8 +126,10 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
 
     if(addr < 0x0800){
         rom->ram[addr] = value;
+        rom->bus = value;
     }else if(addr < 0x2000){
         rom->ram[addr%0x0800] = value;
+        rom->bus = value;
     }else if(addr < 0x4000){
         /* TODO: Write to the PPU. The register is addr&7. */
     }else if(addr < 0x4018){
