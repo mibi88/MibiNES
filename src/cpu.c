@@ -44,9 +44,28 @@ int mn_cpu_init(MNCPU *cpu) {
     return 0;
 }
 
+#define MN_CPU_UPDATE_NZ(reg) \
+    { \
+        if(!reg) cpu->p |= MN_CPU_Z; \
+        else cpu->p &= ~MN_CPU_Z; \
+        if(reg&(1<<7)) cpu->p |= MN_CPU_N; \
+        else cpu->p &= ~MN_CPU_N; \
+    }
+
+#define MN_CPU_CMP(reg, value) \
+    { \
+        if(reg >= value) cpu->p |= MN_CPU_C; \
+        else cpu->p &= ~MN_CPU_C; \
+        if(reg == value) cpu->p |= MN_CPU_Z; \
+        else cpu->p &= ~MN_CPU_Z; \
+        if((reg-value)&(1<<7)) cpu->p |= MN_CPU_N; \
+        else cpu->p &= ~MN_CPU_N; \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
     unsigned char tmp;
+    unsigned short int result;
 
     if(cpu->jammed) return;
 
@@ -269,10 +288,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
             cpu->a <<= 1;
 
-            if(!cpu->a) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->a&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+            MN_CPU_UPDATE_NZ(cpu->a);
             break;
 
         case 0x18:
@@ -290,10 +306,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             cpu->a <<= 1;
             cpu->a |= tmp;
 
-            if(!cpu->a) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->a&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+            MN_CPU_UPDATE_NZ(cpu->a);
             break;
 
         case 0x38:
@@ -309,10 +322,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
             cpu->a >>= 1;
 
-            if(!cpu->a) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->a&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+            MN_CPU_UPDATE_NZ(cpu->a);
             break;
 
         case 0x58:
@@ -330,10 +340,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             cpu->a >>= 1;
             cpu->a |= tmp;
 
-            if(!cpu->a) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->a&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+            MN_CPU_UPDATE_NZ(cpu->a);
             break;
 
         case 0x78:
@@ -344,28 +351,22 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x88:
             /* DEY */
             cpu->y--;
-            if(!cpu->y) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->y&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->y);
             break;
 
         case 0x8A:
             /* TXA */
             cpu->a = cpu->x;
-            if(!cpu->a) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->a&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
             break;
 
         case 0x98:
             /* TYA */
             cpu->a = cpu->y;
-            if(!cpu->a) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->a&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
             break;
 
         case 0x9A:
@@ -376,19 +377,15 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0xA8:
             /* TAY */
             cpu->y = cpu->a;
-            if(!cpu->y) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->y&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->y);
             break;
 
         case 0xAA:
             /* TAX */
             cpu->x = cpu->a;
-            if(!cpu->x) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->x&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->x);
             break;
 
         case 0xB8:
@@ -399,28 +396,22 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0xBA:
             /* TSX */
             cpu->x = cpu->s;
-            if(!cpu->x) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->x&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->x);
             break;
 
         case 0xC8:
             /* INY */
             cpu->y++;
-            if(!cpu->y) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->y&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->y);
             break;
 
         case 0xCA:
             /* DEX */
             cpu->x++;
-            if(!cpu->x) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->x&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->x);
             break;
 
         case 0xD8:
@@ -431,10 +422,8 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0xE8:
             /* INX */
             cpu->x++;
-            if(!cpu->x) cpu->p |= MN_CPU_Z;
-            else cpu->p &= ~MN_CPU_Z;
-            if(cpu->x&(1<<7)) cpu->p |= MN_CPU_N;
-            else cpu->p &= ~MN_CPU_N;
+
+            MN_CPU_UPDATE_NZ(cpu->x);
             break;
 
         case 0xEA:
@@ -446,6 +435,110 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             cpu->p |= MN_CPU_D;
             break;
 
+        /* Opcodes with immediate addressing */
+
+        case 0x09:
+            /* ORA */
+            cpu->a |= cpu->t;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
+        case 0x29:
+            /* AND */
+            cpu->a &= cpu->t;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
+        case 0x49:
+            /* EOR */
+            cpu->a ^= cpu->t;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
+        case 0x69:
+            /* ADC */
+            cpu->a = (result = cpu->a+cpu->t+(cpu->p&MN_CPU_C));
+
+            if(result&(~0xFF)) cpu->p |= MN_CPU_C;
+            else cpu->p &= ~MN_CPU_C;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
+        case 0xA0:
+            /* LDY */
+            cpu->y = cpu->t;
+
+            MN_CPU_UPDATE_NZ(cpu->y);
+
+            cpu->pc++;
+            break;
+
+        case 0xA2:
+            /* LDX */
+            cpu->x = cpu->t;
+
+            MN_CPU_UPDATE_NZ(cpu->x);
+
+            cpu->pc++;
+            break;
+
+        case 0xA9:
+            /* LDA */
+            cpu->a = cpu->t;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
+        case 0xC0:
+            /* CPY */
+            MN_CPU_CMP(cpu->y, cpu->t);
+
+            cpu->pc++;
+            break;
+
+        case 0xC9:
+            /* CMP */
+            MN_CPU_CMP(cpu->a, cpu->t);
+
+            cpu->pc++;
+            break;
+
+        case 0xE0:
+            /* CPX */
+            MN_CPU_CMP(cpu->x, cpu->t);
+
+            cpu->pc++;
+            break;
+
+        case 0xEB: /* Unofficial opcode */
+            /* NOTE: According to No More Secrets, it is the same [as $E9],
+             *  said Fiskbit on the NesDev Discord. */
+        case 0xE9:
+            /* SBC */
+            cpu->a = (result = cpu->a+(~cpu->t)+(cpu->p&MN_CPU_C));
+
+            if(result&(~0xFF)) cpu->p |= MN_CPU_C;
+            else cpu->p &= ~MN_CPU_C;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
         /* Unofficial opcodes */
 
         case 0x1A:
@@ -454,6 +547,11 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x7A:
         case 0xDA:
         case 0xFA:
+
+        case 0x80:
+        case 0x82:
+        case 0x89:
+        case 0xC2:
             /* NOP */
             break;
 
