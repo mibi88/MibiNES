@@ -387,6 +387,44 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_RELATIVE(branch) \
+    { \
+        switch(cpu->cycle) { \
+            case 2: \
+                cpu->target_cycle = 3; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                if(branch){ \
+                    if(cpu->t&(1<<7)){ \
+                        cpu->tmp = cpu->pc-(256-cpu->t); \
+                    }else{ \
+                        cpu->tmp = cpu->pc+cpu->t+1; \
+                    } \
+                    cpu->pc = (cpu->tmp&0xFF)|(cpu->pc&0xFF00); \
+                    cpu->target_cycle++; \
+                }else{ \
+                    cpu->opcode = tmp; \
+                    cpu->cycle = 0; /* It will be incremented to 1 after the
+                                     * switch */ \
+                    cpu->pc++; \
+                } \
+                break; \
+            case 4: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                if(cpu->pc != cpu->tmp) { \
+                    cpu->pc = cpu->tmp; \
+                }else{ \
+                    cpu->opcode = tmp; \
+                    cpu->cycle = 0; /* It will be incremented to 1 after the
+                                     * switch */ \
+                    cpu->pc++; \
+                } \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -406,14 +444,14 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         cpu->cycle = 2;
         cpu->target_cycle = 2;
 
-        printf("c: %d, %c%c%c%c%c-%c%c %02x\n", cpu->cycle,
+        printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %u\n", cpu->cycle,
                cpu->p&MN_CPU_C ? 'C' : '-',
                cpu->p&MN_CPU_Z ? 'Z' : '-',
                cpu->p&MN_CPU_I ? 'I' : '-',
                cpu->p&MN_CPU_D ? 'D' : '-',
                cpu->p&MN_CPU_B ? 'B' : '-',
                cpu->p&MN_CPU_N ? 'N' : '-',
-               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode);
+               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
 
         return;
     }else if(cpu->cycle > cpu->target_cycle){
@@ -421,14 +459,14 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         cpu->pc++;
         cpu->cycle = 1;
 
-        printf("c: %d, %c%c%c%c%c-%c%c %02x\n", cpu->cycle,
+        printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %u\n", cpu->cycle,
                cpu->p&MN_CPU_C ? 'C' : '-',
                cpu->p&MN_CPU_Z ? 'Z' : '-',
                cpu->p&MN_CPU_I ? 'I' : '-',
                cpu->p&MN_CPU_D ? 'D' : '-',
                cpu->p&MN_CPU_B ? 'B' : '-',
                cpu->p&MN_CPU_N ? 'N' : '-',
-               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode);
+               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
 
         return;
     }
@@ -1644,6 +1682,48 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             });
             break;
 
+        /* Relative addressing */
+
+        case 0x10:
+            /* BPL */
+            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_N));
+            break;
+
+        case 0x30:
+            /* BMI */
+            MN_CPU_RELATIVE(cpu->p&MN_CPU_N);
+            break;
+
+        case 0x50:
+            /* BVC */
+            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_V));
+            break;
+
+        case 0x70:
+            /* BVS */
+            MN_CPU_RELATIVE(cpu->p&MN_CPU_V);
+            break;
+
+        case 0x90:
+            /* BCC */
+            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_C));
+            break;
+
+        case 0xB0:
+            /* BCS */
+            MN_CPU_RELATIVE(cpu->p&MN_CPU_C);
+            break;
+
+        case 0xD0:
+            /* BNE */
+            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_Z));
+            break;
+
+        case 0xF0:
+            /* BEQ */
+            MN_CPU_RELATIVE(cpu->p&MN_CPU_Z);
+            break;
+
 #if 0 /* I didn't read the table correctly */
         /* Indexed indirect addressing - read instructions */
 
@@ -1836,14 +1916,14 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             cpu->jammed = 1;
     }
 
-    printf("c: %d, %c%c%c%c%c-%c%c %02x\n", cpu->cycle,
+    printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %u\n", cpu->cycle,
            cpu->p&MN_CPU_C ? 'C' : '-',
            cpu->p&MN_CPU_Z ? 'Z' : '-',
            cpu->p&MN_CPU_I ? 'I' : '-',
            cpu->p&MN_CPU_D ? 'D' : '-',
            cpu->p&MN_CPU_B ? 'B' : '-',
            cpu->p&MN_CPU_N ? 'N' : '-',
-           cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode);
+           cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
 
     cpu->cycle++;
 }
