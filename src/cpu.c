@@ -294,6 +294,99 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_ABSI_READ(i, op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = cpu->t; \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->tmp += i; \
+                tmp = cpu->tmp>>8; \
+                cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
+                cpu->t = tmp; \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                if(cpu->t){ \
+                    cpu->tmp += cpu->t<<8; \
+                    cpu->target_cycle++; \
+                }else{ \
+                    op; \
+                } \
+                break; \
+            case 5: \
+                /* Only executed if a page boundary had been crossed */ \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                op; \
+                break; \
+        } \
+    }
+
+#define MN_CPU_ABSI_RMW(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = cpu->t; \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->tmp += cpu->x; \
+                tmp = cpu->tmp>>8; \
+                cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
+                cpu->t = tmp; \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->tmp += cpu->t<<8; \
+                break; \
+            case 5: \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                break; \
+            case 6: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                op; \
+                break; \
+            case 7: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                break; \
+        } \
+    }
+
+#define MN_CPU_ABSI_STORE(i, op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = cpu->t; \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->tmp += i; \
+                tmp = cpu->tmp>>8; \
+                cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
+                cpu->t = tmp; \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->tmp += cpu->t<<8; \
+                break; \
+            case 5: \
+                op; \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -1398,6 +1491,156 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             /* STX */
             MN_CPU_ZPI_STORE(cpu->y, {
                 tmp = cpu->x;
+            });
+            break;
+
+        /* Absolute indexed addressing */
+
+        /* Absolute indexed addressing - read instructions */
+
+        /* Indexed with X */
+
+        case 0xBC:
+            /* LDY */
+            MN_CPU_ABSI_READ(cpu->x, {
+                cpu->y = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
+            break;
+
+        /* Indexed with X or Y */
+
+        case 0x19:
+        case 0x1D:
+            /* ORA */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                cpu->a |= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x39:
+        case 0x3D:
+            /* AND */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                cpu->a &= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x59:
+        case 0x5D:
+            /* EOR */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                cpu->a ^= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x79:
+        case 0x7D:
+            /* ADC */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                MN_CPU_ADC(tmp);
+            });
+            break;
+
+        case 0xB9:
+        case 0xBD:
+            /* LDA */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                cpu->a = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xD9:
+        case 0xDD:
+            /* CMP */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                MN_CPU_CMP(cpu->a, tmp);
+            });
+            break;
+
+        case 0xF9:
+        case 0xFD:
+            /* SBC */
+            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                MN_CPU_ADC(~tmp);
+            });
+            break;
+
+        /* Indexed with Y */
+
+        case 0xBE:
+            /* LDX */
+            MN_CPU_ABSI_READ(cpu->x, {
+                cpu->x = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
+            break;
+
+        /* Absolute addressing - RMW instructions */
+
+        case 0x1E:
+            /* ASL */
+            MN_CPU_ABSI_RMW({
+                MN_CPU_ASL(cpu->t);
+            });
+            break;
+
+        case 0x3E:
+            /* ROL */
+            MN_CPU_ABSI_RMW({
+                MN_CPU_ROL(cpu->t);
+            });
+            break;
+
+        case 0x5E:
+            /* LSR */
+            MN_CPU_ABSI_RMW({
+                MN_CPU_LSR(cpu->t);
+            });
+            break;
+
+        case 0x7E:
+            /* ROR */
+            MN_CPU_ABSI_RMW({
+                MN_CPU_ROR(cpu->t);
+            });
+            break;
+
+        case 0xDE:
+            /* DEC */
+            MN_CPU_ABSI_RMW({
+                cpu->t--;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
+        case 0xFE:
+            /* INC */
+            MN_CPU_ABSI_RMW({
+                cpu->t++;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
+        /* Absolute addressing - write instructions */
+
+        case 0x99:
+        case 0x9D:
+            /* STA */
+            MN_CPU_ABSI_STORE(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+                tmp = cpu->a;
             });
             break;
 
