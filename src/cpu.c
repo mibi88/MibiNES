@@ -70,8 +70,7 @@ int mn_cpu_init(MNCPU *cpu) {
         if(result&(~0xFF)) cpu->p |= MN_CPU_C; \
         else cpu->p &= ~MN_CPU_C; \
  \
-        if(((short int)result >= 0 && !(cpu->a&(1<<7))) || \
-           ((short int)result < 0 && (cpu->a&(1<<7)))){ \
+        if((result^tmp)&(result^(value))&(1<<7)){ \
             cpu->p |= MN_CPU_V; \
         }else{ \
             cpu->p &= ~MN_CPU_V; \
@@ -128,9 +127,20 @@ int mn_cpu_init(MNCPU *cpu) {
         MN_CPU_UPDATE_NZ(var); \
     }
 
+#define MN_CPU_BIT(value) \
+    { \
+        if(!(value&cpu->a)) cpu->p |= MN_CPU_Z; \
+        else cpu->p &= ~MN_CPU_Z; \
+ \
+        /* Set V to the bit 6 of the memory value and N to the bit
+         * 7 of the memory value. */ \
+        cpu->p &= (1<<6)-1; \
+        cpu->p |= value&((1<<6)|(1<<7)); \
+    }
+
 #define MN_CPU_ABS_RMW(op) \
     { \
-        switch(cpu->opcode){ \
+        switch(cpu->cycle){ \
             case 2: \
                 cpu->target_cycle = 6; \
                 cpu->pc++; \
@@ -157,7 +167,7 @@ int mn_cpu_init(MNCPU *cpu) {
 
 #define MN_CPU_ABS_STORE(op) \
     { \
-        switch(cpu->opcode){ \
+        switch(cpu->cycle){ \
             case 2: \
                 cpu->target_cycle = 4; \
                 cpu->pc++; \
@@ -174,8 +184,29 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_ZP_READ(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 3; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                op; \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
-    /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
+    /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
+     *
+     * I also used:
+     * https://www.nesdev.org/wiki/CPU_unofficial_opcodes
+     * http://www.6502.org/users/obelisk/6502/reference.html
+     * https://www.oxyron.de/html/opcodes02.html
+     * https://www.nesdev.org/wiki/Instruction_reference#ADC
+     */
     unsigned char tmp;
     unsigned short int result;
 
@@ -619,7 +650,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x4C:
             /* JMP */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 3;
                     cpu->pc++;
@@ -635,7 +666,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x0D:
             /* ORA */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -655,7 +686,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x2C:
             /* BIT */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -668,13 +699,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                 case 4:
                     tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
 
-                    if(!(tmp&cpu->a)) cpu->p |= MN_CPU_Z;
-                    else cpu->p &= ~MN_CPU_Z;
-
-                    /* Set V to the bit 6 of the memory value and N to the bit
-                     * 7 of the memory value. */
-                    cpu->p &= (1<<6)-1;
-                    cpu->p |= tmp&((1<<6)|(1<<7));
+                    MN_CPU_BIT(tmp);
 
                     break;
             }
@@ -682,7 +707,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x2D:
             /* AND */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -702,7 +727,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x4D:
             /* EOR */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -722,7 +747,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x6D:
             /* ADC */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -742,7 +767,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xAC:
             /* LDY */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -762,7 +787,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xAD:
             /* LDA */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -782,7 +807,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xAE:
             /* LDX */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -802,7 +827,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xCC:
             /* CPY */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -822,7 +847,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xCD:
             /* CMP */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -842,7 +867,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xEC:
             /* CPX */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -862,7 +887,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xED:
             /* SBC */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -951,6 +976,110 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             });
             break;
 
+        /* Zeropage addressing */
+
+        /* Zeropage addressing - read instructions */
+
+        case 0x05:
+            /* ORA */
+            MN_CPU_ZP_READ({
+                cpu->a |= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x24:
+            /* BIT */
+            MN_CPU_ZP_READ({
+                MN_CPU_BIT(tmp);
+            });
+            break;
+
+        case 0x25:
+            /* AND */
+            MN_CPU_ZP_READ({
+                cpu->a &= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x45:
+            /* EOR */
+            MN_CPU_ZP_READ({
+                cpu->a ^= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x65:
+            /* ADC */
+            MN_CPU_ZP_READ({
+                MN_CPU_ADC(tmp);
+            });
+            break;
+
+        case 0xA4:
+            /* LDY */
+            MN_CPU_ZP_READ({
+                cpu->y = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
+            break;
+
+        case 0xA5:
+            /* LDA */
+            MN_CPU_ZP_READ({
+                cpu->a = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xA6:
+            /* LDX */
+            MN_CPU_ZP_READ({
+                cpu->x = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
+            break;
+
+        case 0xC4:
+            /* CPY */
+            MN_CPU_ZP_READ({
+                MN_CPU_CMP(cpu->y, tmp);
+            });
+            break;
+
+        case 0xC5:
+            /* CMP */
+            MN_CPU_ZP_READ({
+                MN_CPU_CMP(cpu->a, tmp);
+            });
+            break;
+
+        case 0xE4:
+            /* CPX */
+            MN_CPU_ZP_READ({
+                MN_CPU_CMP(cpu->x, tmp);
+            });
+            break;
+
+        case 0xE5:
+            /* SBC */
+            MN_CPU_ZP_READ({
+                MN_CPU_ADC(~tmp);
+            });
+            break;
+
+        /* Zeropage addressing - RMW instructions */
+
+        /* Zeropage addressing - write instructions */
+
         /* Unofficial opcodes */
 
         /* Implied addressing */
@@ -988,7 +1117,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x0C:
             /* NOP */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -1006,7 +1135,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0xAF:
             /* LAX */
-            switch(cpu->opcode){
+            switch(cpu->cycle){
                 case 2:
                     cpu->target_cycle = 4;
                     cpu->pc++;
@@ -1028,8 +1157,20 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x8F:
             /* SAX */
+            /* NOTE: Apparently it is unstable on the NES */
             MN_CPU_ABS_STORE({
                 tmp = cpu->a&cpu->x;
+            });
+            break;
+
+        /* Zeropage addressing */
+        case 0xA7:
+            /* LAX */
+            MN_CPU_ZP_READ({
+                cpu->a = tmp;
+                cpu->x = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
             });
             break;
 
