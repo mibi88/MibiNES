@@ -41,7 +41,7 @@ HEX   0/8   1/9   2/a   3/b   4/c   5/d   6/e   7/f
 0x68 [PLA] [ADC] [ROR]  ARR   JMP  [ADC] [ROR]  RRA
 0x70  BVS   ADC  {STP}  RRA   NOP   ADC   ROR   RRA
 0x78 [SEI]  ADC  {NOP}  RRA   NOP   ADC   ROR   RRA
-0x80 {NOP}  STA  {NOP}  SAX   STY   STA   STX   SAX
+0x80 {NOP}  STA  {NOP}  SAX  [STY] [STA] [STX] {SAX}
 0x88 [DEY] {NOP} [TXA]  XAA  [STY] [STA] [STX] {SAX}
 0x90  BCC   STA  {STP}  AHX   STY   STA   STX   SAX
 0x98  TYA   STA  [TXS]  TAS   SHY   STA   SHX   AHX

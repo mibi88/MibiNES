@@ -219,6 +219,20 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_ZP_STORE(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 3; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                op; \
+                emu->mapper.write(emu, &emu->mapper, cpu->t, tmp); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -1147,6 +1161,27 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         /* Zeropage addressing - write instructions */
 
+        case 0x84:
+            /* STY */
+            MN_CPU_ZP_STORE({
+                tmp = cpu->y;
+            });
+            break;
+
+        case 0x85:
+            /* STA */
+            MN_CPU_ZP_STORE({
+                tmp = cpu->a;
+            });
+            break;
+
+        case 0x86:
+            /* STX */
+            MN_CPU_ZP_STORE({
+                tmp = cpu->x;
+            });
+            break;
+
         /* Unofficial opcodes */
 
         /* Implied addressing */
@@ -1231,6 +1266,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             break;
 
         /* Zeropage addressing */
+
         case 0xA7:
             /* LAX */
             MN_CPU_ZP_READ({
@@ -1238,6 +1274,14 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                 cpu->x = tmp;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x87:
+            /* SAX */
+            /* NOTE: Apparently it is unstable on the NES */
+            MN_CPU_ZP_STORE({
+                tmp = cpu->a&cpu->x;
             });
             break;
 
