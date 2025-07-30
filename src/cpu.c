@@ -62,6 +62,24 @@ int mn_cpu_init(MNCPU *cpu) {
         else cpu->p &= ~MN_CPU_N; \
     }
 
+#define MN_CPU_ADC(value) \
+    { \
+        tmp = cpu->a; \
+        cpu->a = (result = cpu->a+(value)+(cpu->p&MN_CPU_C)); \
+ \
+        if(result&(~0xFF)) cpu->p |= MN_CPU_C; \
+        else cpu->p &= ~MN_CPU_C; \
+ \
+        if(((short int)result >= 0 && !(cpu->a&(1<<7))) || \
+           ((short int)result < 0 && (cpu->a&(1<<7)))){ \
+            cpu->p |= MN_CPU_V; \
+        }else{ \
+            cpu->p &= ~MN_CPU_V; \
+        } \
+ \
+        MN_CPU_UPDATE_NZ(cpu->a); \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
     unsigned char tmp;
@@ -466,12 +484,8 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x69:
             /* ADC */
-            cpu->a = (result = cpu->a+cpu->t+(cpu->p&MN_CPU_C));
 
-            if(result&(~0xFF)) cpu->p |= MN_CPU_C;
-            else cpu->p &= ~MN_CPU_C;
-
-            MN_CPU_UPDATE_NZ(cpu->a);
+            MN_CPU_ADC(cpu->t);
 
             cpu->pc++;
             break;
@@ -529,17 +543,278 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
              *  said Fiskbit on the NesDev Discord. */
         case 0xE9:
             /* SBC */
-            cpu->a = (result = cpu->a+(~cpu->t)+(cpu->p&MN_CPU_C));
 
-            if(result&(~0xFF)) cpu->p |= MN_CPU_C;
-            else cpu->p &= ~MN_CPU_C;
+            MN_CPU_ADC(~cpu->t);
+            break;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
+        /* Absolute addressing */
 
-            cpu->pc++;
+        case 0x4C:
+            /* JMP */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 3;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->pc = cpu->t|(tmp<<8);
+                    break;
+            }
+            break;
+
+        /* Absolute addressing - read instructions */
+
+        case 0x0D:
+            /* ORA */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->a |= emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_UPDATE_NZ(cpu->a);
+                    break;
+            }
+            break;
+
+        case 0x2C:
+            /* BIT */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    if(!(tmp&cpu->a)) cpu->p |= MN_CPU_Z;
+                    else cpu->p &= ~MN_CPU_Z;
+
+                    /* Set V to the bit 6 of the memory value and N to the bit
+                     * 7 of the memory value. */
+                    cpu->p &= (1<<6)-1;
+                    cpu->p |= tmp&((1<<6)|(1<<7));
+
+                    break;
+            }
+            break;
+
+        case 0x2D:
+            /* AND */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->a &= emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_UPDATE_NZ(cpu->a);
+                    break;
+            }
+            break;
+
+        case 0x4D:
+            /* EOR */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->a ^= emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_UPDATE_NZ(cpu->a);
+                    break;
+            }
+            break;
+
+        case 0x6D:
+            /* ADC */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_ADC(tmp);
+                    break;
+            }
+            break;
+
+        case 0xAC:
+            /* LDY */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->y = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_UPDATE_NZ(cpu->y);
+                    break;
+            }
+            break;
+
+        case 0xAD:
+            /* LDA */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->a = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_UPDATE_NZ(cpu->a);
+                    break;
+            }
+            break;
+
+        case 0xAE:
+            /* LDX */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->x = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_UPDATE_NZ(cpu->x);
+                    break;
+            }
+            break;
+
+        case 0xCC:
+            /* CPY */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_CMP(cpu->y, tmp);
+                    break;
+            }
+            break;
+
+        case 0xCD:
+            /* CMP */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_CMP(cpu->a, tmp);
+                    break;
+            }
+            break;
+
+        case 0xEC:
+            /* CPX */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_CMP(cpu->x, tmp);
+                    break;
+            }
+            break;
+
+        case 0xED:
+            /* SBC */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+
+                    MN_CPU_ADC(~tmp);
+                    break;
+            }
             break;
 
         /* Unofficial opcodes */
+
+        /* Implied addressing */
 
         case 0x1A:
         case 0x3A:
@@ -547,12 +822,68 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x7A:
         case 0xDA:
         case 0xFA:
+            /* NOP */
+            break;
+
+        /* Immediate addressing */
 
         case 0x80:
         case 0x82:
         case 0x89:
         case 0xC2:
             /* NOP */
+            cpu->pc++;
+            break;
+
+        case 0xAB:
+            /* LAX */
+            cpu->a = cpu->t;
+            cpu->x = cpu->a;
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+
+            cpu->pc++;
+            break;
+
+        /* Absolute addressing */
+
+        case 0x0C:
+            /* NOP */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+                    break;
+            }
+            break;
+
+        case 0xAF:
+            /* LAX */
+            switch(cpu->opcode){
+                case 2:
+                    cpu->target_cycle = 4;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->tmp = cpu->t|(tmp<<8);
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->a = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+                    cpu->x = cpu->a;
+
+                    MN_CPU_UPDATE_NZ(cpu->a);
+                    break;
+            }
             break;
 
         case 0x02:
