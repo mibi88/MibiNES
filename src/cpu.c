@@ -80,6 +80,81 @@ int mn_cpu_init(MNCPU *cpu) {
         MN_CPU_UPDATE_NZ(cpu->a); \
     }
 
+#define MN_CPU_ASL(var) \
+    { \
+        cpu->p &= ~MN_CPU_C; \
+        /* Set the carry flag to the old bit 7 */ \
+        cpu->p |= (var>>7)&1; \
+ \
+        var <<= 1; \
+ \
+        MN_CPU_UPDATE_NZ(var); \
+    }
+
+#define MN_CPU_ROL(var) \
+    { \
+        tmp = cpu->p&MN_CPU_C; \
+        cpu->p &= ~MN_CPU_C; \
+        /* Set the carry flag to the old bit 7 */ \
+        cpu->p |= (cpu->a>>7)&1; \
+ \
+        var <<= 1; \
+        var |= tmp; \
+ \
+        MN_CPU_UPDATE_NZ(var); \
+    }
+
+#define MN_CPU_LSR(var) \
+    { \
+        cpu->p &= ~MN_CPU_C; \
+        /* Set the carry flag to the old bit 0 */ \
+        cpu->p |= cpu->a&1; \
+ \
+        var >>= 1; \
+ \
+        MN_CPU_UPDATE_NZ(var); \
+    }
+
+#define MN_CPU_ROR(var) \
+    { \
+        tmp = (cpu->p&MN_CPU_C)<<7; \
+        cpu->p &= ~MN_CPU_C; \
+        /* Set the carry flag to the old bit 0 */ \
+        cpu->p |= cpu->a&1; \
+ \
+        var >>= 1; \
+        var |= tmp; \
+ \
+        MN_CPU_UPDATE_NZ(var); \
+    }
+
+#define MN_CPU_ABS_RMW(op) \
+    { \
+        switch(cpu->opcode){ \
+            case 2: \
+                cpu->target_cycle = 6; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->tmp = cpu->t|(tmp<<8); \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                break; \
+            case 5: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+ \
+                /* Perform the operation on it */ \
+                op; \
+                break; \
+            case 6: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
     unsigned char tmp;
@@ -300,13 +375,8 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x0A:
             /* ASL */
-            cpu->p &= ~MN_CPU_C;
-            /* Set the carry flag to the old bit 7 */
-            cpu->p |= (cpu->a>>7)&1;
 
-            cpu->a <<= 1;
-
-            MN_CPU_UPDATE_NZ(cpu->a);
+            MN_CPU_ASL(cpu->a);
             break;
 
         case 0x18:
@@ -316,15 +386,8 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x2A:
             /* ROL */
-            tmp = cpu->p&MN_CPU_C;
-            cpu->p &= ~MN_CPU_C;
-            /* Set the carry flag to the old bit 7 */
-            cpu->p |= (cpu->a>>7)&1;
 
-            cpu->a <<= 1;
-            cpu->a |= tmp;
-
-            MN_CPU_UPDATE_NZ(cpu->a);
+            MN_CPU_ROL(cpu->a);
             break;
 
         case 0x38:
@@ -334,13 +397,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x4A:
             /* LSR */
-            cpu->p &= ~MN_CPU_C;
-            /* Set the carry flag to the old bit 0 */
-            cpu->p |= cpu->a&1;
-
-            cpu->a >>= 1;
-
-            MN_CPU_UPDATE_NZ(cpu->a);
+            MN_CPU_LSR(cpu->a);
             break;
 
         case 0x58:
@@ -350,15 +407,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x6A:
             /* ROR */
-            tmp = (cpu->p&MN_CPU_C)<<7;
-            cpu->p &= ~MN_CPU_C;
-            /* Set the carry flag to the old bit 0 */
-            cpu->p |= cpu->a&1;
-
-            cpu->a >>= 1;
-            cpu->a |= tmp;
-
-            MN_CPU_UPDATE_NZ(cpu->a);
+            MN_CPU_ROR(cpu->a);
             break;
 
         case 0x78:
@@ -812,6 +861,54 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             }
             break;
 
+        /* Absolute addressing - read-modify-write (RMW) instructions */
+
+        case 0x0E:
+            /* ASL */
+            MN_CPU_ABS_RMW({
+                MN_CPU_ASL(cpu->t);
+            });
+            break;
+
+        case 0x2E:
+            /* ROL */
+            MN_CPU_ABS_RMW({
+                MN_CPU_ROL(cpu->t);
+            });
+            break;
+
+        case 0x4E:
+            /* LSR */
+            MN_CPU_ABS_RMW({
+                MN_CPU_LSR(cpu->t);
+            });
+            break;
+
+        case 0x6E:
+            /* ROR */
+            MN_CPU_ABS_RMW({
+                MN_CPU_ROR(cpu->t);
+            });
+            break;
+
+        case 0xCE:
+            /* DEC */
+            MN_CPU_ABS_RMW({
+                cpu->t--;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
+        case 0xEE:
+            /* INC */
+            MN_CPU_ABS_RMW({
+                cpu->t++;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
         /* Unofficial opcodes */
 
         /* Implied addressing */
@@ -878,6 +975,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                     cpu->pc++;
                     break;
                 case 4:
+                    /* XXX: Is LAX performing only one or two reads? */
                     cpu->a = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
                     cpu->x = cpu->a;
 
