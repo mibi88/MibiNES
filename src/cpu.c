@@ -155,6 +155,25 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_ABS_STORE(op) \
+    { \
+        switch(cpu->opcode){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->tmp = cpu->t|(tmp<<8); \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                op; \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt */
     unsigned char tmp;
@@ -909,6 +928,29 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             });
             break;
 
+        /* Absolute addressing - write instructions */
+
+        case 0x8C:
+            /* STY */
+            MN_CPU_ABS_STORE({
+                tmp = cpu->y;
+            });
+            break;
+
+        case 0x8D:
+            /* STA */
+            MN_CPU_ABS_STORE({
+                tmp = cpu->a;
+            });
+            break;
+
+        case 0x8E:
+            /* STX */
+            MN_CPU_ABS_STORE({
+                tmp = cpu->x;
+            });
+            break;
+
         /* Unofficial opcodes */
 
         /* Implied addressing */
@@ -982,6 +1024,13 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                     MN_CPU_UPDATE_NZ(cpu->a);
                     break;
             }
+            break;
+
+        case 0x8F:
+            /* SAX */
+            MN_CPU_ABS_STORE({
+                tmp = cpu->a&cpu->x;
+            });
             break;
 
         case 0x02:

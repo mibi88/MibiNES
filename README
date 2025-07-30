@@ -26,23 +26,23 @@ they are unofficial opcodes.
 
 HEX   0/8   1/9   2/a   3/b   4/c   5/d   6/e   7/f
 0x00 [BRK]  ORA  {STP}  SLO   NOP   ORA   ASL   SLO
-0x08 [PHP] [ORA] [ASL]  ANC  {NOP} [ORA]  ASL   SLO
+0x08 [PHP] [ORA] [ASL]  ANC  {NOP} [ORA] [ASL]  SLO
 0x10  BPL   ORA  {STP}  SLO   NOP   ORA   ASL   SLO
 0x18 [CLC]  ORA  {NOP}  SLO   NOP   ORA   ASL   SLO
 0x20 [JSR]  AND  {STP}  RLA   BIT   AND   ROL   RLA
-0x28 [PLP] [AND] [ROL]  ANC  [BIT] [AND]  ROL   RLA
+0x28 [PLP] [AND] [ROL]  ANC  [BIT] [AND] [ROL]  RLA
 0x30  BMI   AND  {STP}  RLA   NOP   AND   ROL   RLA
 0x38 [SEC]  AND  {NOP}  RLA   NOP   AND   ROL   RLA
 0x40 [RTI]  EOR  {STP}  SRE   NOP   EOR   LSR   SRE
-0x48 [PHA] [EOR] [LSR]  ALR  [JMP] [EOR]  LSR   SRE
+0x48 [PHA] [EOR] [LSR]  ALR  [JMP] [EOR] [LSR]  SRE
 0x50  BVC   EOR  {STP}  SRE   NOP   EOR   LSR   SRE
 0x58 [CLI]  EOR  {NOP}  SRE   NOP   EOR   LSR   SRE
 0x60 [RTS]  ADC  {STP}  RRA   NOP   ADC   ROR   RRA
-0x68 [PLA] [ADC] [ROR]  ARR   JMP  [ADC]  ROR   RRA
+0x68 [PLA] [ADC] [ROR]  ARR   JMP  [ADC] [ROR]  RRA
 0x70  BVS   ADC  {STP}  RRA   NOP   ADC   ROR   RRA
 0x78 [SEI]  ADC  {NOP}  RRA   NOP   ADC   ROR   RRA
 0x80 {NOP}  STA  {NOP}  SAX   STY   STA   STX   SAX
-0x88 [DEY] {NOP} [TXA]  XAA   STY   STA   STX   SAX
+0x88 [DEY] {NOP} [TXA]  XAA  [STY] [STA] [STX] {SAX}
 0x90  BCC   STA  {STP}  AHX   STY   STA   STX   SAX
 0x98  TYA   STA  [TXS]  TAS   SHY   STA   SHX   AHX
 0xa0 [LDY]  LDA  [LDX]  LAX   LDY   LDA   LDX   LAX
@@ -50,11 +50,11 @@ HEX   0/8   1/9   2/a   3/b   4/c   5/d   6/e   7/f
 0xb0  BCS   LDA  {STP}  LAX   LDY   LDA   LDX   LAX
 0xb8 [CLV]  LDA  [TSX]  LAS   LDY   LDA   LDX   LAX
 0xc0 [CPY]  CMP  {NOP}  DCP   CPY   CMP   DEC   DCP
-0xc8 [INY] [CMP] [DEX]  AXS  [CPY] [CMP]  DEC   DCP
+0xc8 [INY] [CMP] [DEX]  AXS  [CPY] [CMP] [DEC]  DCP
 0xd0  BNE   CMP  {STP}  DCP   NOP   CMP   DEC   DCP
 0xd8 [CLD]  CMP   NOP   DCP  {NOP}  CMP   DEC   DCP
 0xe0 [CPX]  SBC   NOP   ISC   CPX   SBC   INC   ISC
-0xe8 [INX] [SBC] [NOP]  SBC  [CPX] [SBC]  INC   ISC
+0xe8 [INX] [SBC] [NOP]  SBC  [CPX] [SBC] [INC]  ISC
 0xf0  BEQ   SBC  {STP}  ISC   NOP   SBC   INC   ISC
 0xf8 [SED]  SBC   NOP   ISC  {NOP}  SBC   INC   ISC
 
