@@ -425,6 +425,150 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_IDXIND_READ(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 6; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->t += cpu->x; \
+                break; \
+            case 4: \
+                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                break; \
+            case 5: \
+                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
+                                             (cpu->t+1)&0xFF)<<8; \
+                break; \
+            case 6: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                op; \
+                break; \
+        } \
+    }
+
+#define MN_CPU_IDXIND_RMW(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 6; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->t += cpu->x; \
+                break; \
+            case 4: \
+                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                break; \
+            case 5: \
+                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
+                                             (cpu->t+1)&0xFF)<<8; \
+                break; \
+            case 6: \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                break; \
+            case 7: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                op; \
+                break; \
+            case 8: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                break; \
+        } \
+    }
+
+#define MN_CPU_IDXIND_WRITE(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 6; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->t += cpu->x; \
+                break; \
+            case 4: \
+                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                break; \
+            case 5: \
+                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
+                                             (cpu->t+1)&0xFF)<<8; \
+                break; \
+            case 6: \
+                op; \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                break; \
+        } \
+    }
+
+#define MN_CPU_INDIDX_READ(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 5; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                break; \
+            case 4: \
+                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
+                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp2 = cpu->tmp+cpu->y; \
+                cpu->tmp = (cpu->tmp2&0xFF)|(cpu->tmp&0xFF00); \
+                break; \
+            case 5: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                if(cpu->tmp != cpu->tmp2){ \
+                    cpu->tmp = cpu->tmp2; \
+                    cpu->target_cycle++; \
+                }else{ \
+                    op; \
+                } \
+                break; \
+            case 6: \
+                /* This cycle is only executed if the effective address was
+                 * fixed. */ \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                op; \
+                break; \
+        } \
+    }
+
+#define MN_CPU_INDIDX_WRITE(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 6; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                break; \
+            case 4: \
+                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
+                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp2 = cpu->tmp+cpu->y; \
+                cpu->tmp = (cpu->tmp2&0xFF)|(cpu->tmp&0xFF00); \
+                break; \
+            case 5: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->tmp = cpu->tmp2; \
+                break; \
+            case 6: \
+                /* This cycle is only executed if the effective address was
+                 * fixed. */ \
+                op; \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -1724,13 +1868,13 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             MN_CPU_RELATIVE(cpu->p&MN_CPU_Z);
             break;
 
-#if 0 /* I didn't read the table correctly */
+        /* Indexed indirect addressing */
+
         /* Indexed indirect addressing - read instructions */
 
         case 0x01:
-        case 0x11:
             /* ORA */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 cpu->a |= tmp;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
@@ -1738,9 +1882,8 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             break;
 
         case 0x21:
-        case 0x31:
             /* AND */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 cpu->a &= tmp;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
@@ -1748,9 +1891,8 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             break;
 
         case 0x41:
-        case 0x51:
             /* EOR */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 cpu->a ^= tmp;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
@@ -1758,17 +1900,15 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             break;
 
         case 0x61:
-        case 0x71:
             /* ADC */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 MN_CPU_ADC(tmp);
             });
             break;
 
         case 0xA1:
-        case 0xB1:
             /* LDA */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 cpu->a = tmp;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
@@ -1776,21 +1916,122 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             break;
 
         case 0xC1:
-        case 0xD1:
             /* CMP */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 MN_CPU_CMP(cpu->a, tmp);
             });
             break;
 
         case 0xE1:
-        case 0xF1:
             /* SBC */
-            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+            MN_CPU_IDXIND_READ({
                 MN_CPU_ADC(~tmp);
             });
             break;
-#endif
+
+        /* Indexed indirect addressing - Write instructions */
+
+        case 0x81:
+            /* STA */
+            MN_CPU_IDXIND_WRITE({
+                cpu->t = cpu->a;
+            });
+            break;
+
+        /* Indirect indexed addressing */
+
+        /* Indirect indexed addressing - Read instructions */
+
+        case 0x11:
+            /* ORA */
+            MN_CPU_INDIDX_READ({
+                cpu->a |= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x31:
+            /* AND */
+            MN_CPU_INDIDX_READ({
+                cpu->a &= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x51:
+            /* EOR */
+            MN_CPU_INDIDX_READ({
+                cpu->a ^= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x71:
+            /* ADC */
+            MN_CPU_INDIDX_READ({
+                MN_CPU_ADC(tmp);
+            });
+            break;
+
+        case 0xB1:
+            /* LDA */
+            MN_CPU_INDIDX_READ({
+                cpu->a = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xD1:
+            /* CMP */
+            MN_CPU_INDIDX_READ({
+                MN_CPU_CMP(cpu->a, tmp);
+            });
+            break;
+
+        case 0xF1:
+            /* SBC */
+            MN_CPU_INDIDX_READ({
+                MN_CPU_ADC(~tmp);
+            });
+            break;
+
+        /* Indirect indexed addressing - write instructions */
+
+        case 0x91:
+            /* STA */
+            MN_CPU_INDIDX_WRITE({
+                tmp = cpu->a;
+            });
+            break;
+
+        /* Indirect absolute addressing */
+
+        case 0x6C:
+            /* JMP */
+            switch(cpu->cycle){
+                case 2:
+                    cpu->target_cycle = 5;
+                    cpu->pc++;
+                    break;
+                case 3:
+                    cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc)<<8;
+                    cpu->tmp |= cpu->t;
+                    cpu->pc++;
+                    break;
+                case 4:
+                    cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    break;
+                case 5:
+                    cpu->pc = emu->mapper.read(emu, &emu->mapper,
+                                               cpu->tmp)<<8;
+                    cpu->pc |= cpu->t;
+                    break;
+            }
+            break;
 
         /* Unofficial opcodes */
 

@@ -50,7 +50,7 @@ typedef struct {
     unsigned char target_cycle;
 
     unsigned char opcode, t;
-    unsigned short int tmp;
+    unsigned short int tmp, tmp2;
 
     int jammed;
 } MNCPU;
