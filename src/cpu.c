@@ -233,6 +233,67 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_ZPI_READ(i, op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->t += i; \
+                break; \
+            case 4: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                op; \
+                break; \
+        } \
+    }
+
+#define MN_CPU_ZPI_RMW(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 6; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->t += cpu->x; \
+                break; \
+            case 4: \
+                cpu->tmp = cpu->t; \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                break; \
+            case 5: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                op; \
+                break; \
+            case 6: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                break; \
+        } \
+    }
+
+#define MN_CPU_ZPI_STORE(i, op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->t += i; \
+                break; \
+            case 4: \
+                op; \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -1181,6 +1242,232 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                 tmp = cpu->x;
             });
             break;
+
+        /* Indexed zeropage addressing */
+
+        /* Indexed zeropage addressing - read instructions */
+
+        /* Indexed with X */
+
+        case 0x15:
+            /* ORA */
+            MN_CPU_ZPI_READ(cpu->x, {
+                cpu->a |= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x35:
+            /* AND */
+            MN_CPU_ZPI_READ(cpu->x, {
+                cpu->a &= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x55:
+            /* EOR */
+            MN_CPU_ZPI_READ(cpu->x, {
+                cpu->a ^= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x75:
+            /* ADC */
+            MN_CPU_ZPI_READ(cpu->x, {
+                MN_CPU_ADC(tmp);
+            });
+            break;
+
+        case 0xB4:
+            /* LDY */
+            MN_CPU_ZPI_READ(cpu->x, {
+                cpu->y = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
+            break;
+
+        case 0xB5:
+            /* LDA */
+            MN_CPU_ZPI_READ(cpu->x, {
+                cpu->a = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xD5:
+            /* CMP */
+            MN_CPU_ZPI_READ(cpu->x, {
+                MN_CPU_CMP(cpu->a, tmp);
+            });
+            break;
+
+        case 0xF5:
+            /* SBC */
+            MN_CPU_ZPI_READ(cpu->x, {
+                MN_CPU_ADC(~tmp);
+            });
+            break;
+
+        /* Indexed with Y */
+
+        case 0xB6:
+            /* LDX */
+            MN_CPU_ZPI_READ(cpu->y, {
+                cpu->x = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
+            break;
+
+        /* Indexed zeropage addressing - RMW instructions */
+
+        case 0x16:
+            /* ASL */
+            MN_CPU_ZPI_RMW({
+                MN_CPU_ASL(cpu->t);
+            });
+            break;
+
+        case 0x36:
+            /* ROL */
+            MN_CPU_ZPI_RMW({
+                MN_CPU_ROL(cpu->t);
+            });
+            break;
+
+        case 0x56:
+            /* LSR */
+            MN_CPU_ZPI_RMW({
+                MN_CPU_LSR(cpu->t);
+            });
+            break;
+
+        case 0x76:
+            /* ROR */
+            MN_CPU_ZPI_RMW({
+                MN_CPU_ROR(cpu->t);
+            });
+            break;
+
+        case 0xD6:
+            /* DEC */
+            MN_CPU_ZPI_RMW({
+                cpu->t--;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
+        case 0xF6:
+            /* INC */
+            MN_CPU_ZPI_RMW({
+                cpu->t++;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
+        /* Indexed zeropage addressing - write instructions */
+
+        /* Indexed with X */
+
+        case 0x94:
+            /* STY */
+            MN_CPU_ZPI_STORE(cpu->x, {
+                tmp = cpu->y;
+            });
+            break;
+
+        case 0x95:
+            /* STA */
+            MN_CPU_ZPI_STORE(cpu->x, {
+                tmp = cpu->a;
+            });
+            break;
+
+        /* Indexed with Y */
+
+        case 0x96:
+            /* STX */
+            MN_CPU_ZPI_STORE(cpu->y, {
+                tmp = cpu->x;
+            });
+            break;
+
+#if 0 /* I didn't read the table correctly */
+        /* Indexed indirect addressing - read instructions */
+
+        case 0x01:
+        case 0x11:
+            /* ORA */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                cpu->a |= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x21:
+        case 0x31:
+            /* AND */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                cpu->a &= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x41:
+        case 0x51:
+            /* EOR */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                cpu->a ^= tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0x61:
+        case 0x71:
+            /* ADC */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                MN_CPU_ADC(tmp);
+            });
+            break;
+
+        case 0xA1:
+        case 0xB1:
+            /* LDA */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                cpu->a = tmp;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xC1:
+        case 0xD1:
+            /* CMP */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                MN_CPU_CMP(cpu->a, tmp);
+            });
+            break;
+
+        case 0xE1:
+        case 0xF1:
+            /* SBC */
+            MN_CPU_IND_READ(cpu->opcode&(1<<4) ? cpu->y : cpu->x, {
+                MN_CPU_ADC(~tmp);
+            });
+            break;
+#endif
 
         /* Unofficial opcodes */
 
