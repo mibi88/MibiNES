@@ -138,6 +138,27 @@ int mn_cpu_init(MNCPU *cpu) {
         cpu->p |= value&((1<<6)|(1<<7)); \
     }
 
+#define MN_CPU_ABS_READ(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 4; \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->tmp = cpu->t|(tmp<<8); \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+ \
+                op; \
+ \
+                break; \
+        } \
+    }
+
 #define MN_CPU_ABS_RMW(op) \
     { \
         switch(cpu->cycle){ \
@@ -1037,243 +1058,99 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x0D:
             /* ORA */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->a |= emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+            MN_CPU_ABS_READ({
+                cpu->a |= tmp;
 
-                    MN_CPU_UPDATE_NZ(cpu->a);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x2C:
             /* BIT */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
-
-                    MN_CPU_BIT(tmp);
-
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                MN_CPU_BIT(tmp);
+            });
             break;
 
         case 0x2D:
             /* AND */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->a &= emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+            MN_CPU_ABS_READ({
+                cpu->a &= tmp;
 
-                    MN_CPU_UPDATE_NZ(cpu->a);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x4D:
             /* EOR */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->a ^= emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+            MN_CPU_ABS_READ({
+                cpu->a ^= tmp;
 
-                    MN_CPU_UPDATE_NZ(cpu->a);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x6D:
             /* ADC */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
-
-                    MN_CPU_ADC(tmp);
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                MN_CPU_ADC(tmp);
+            });
             break;
 
         case 0xAC:
             /* LDY */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->y = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+            MN_CPU_ABS_READ({
+                cpu->y = tmp;
 
-                    MN_CPU_UPDATE_NZ(cpu->y);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
             break;
 
         case 0xAD:
             /* LDA */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->a = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+            MN_CPU_ABS_READ({
+                cpu->a = tmp;
 
-                    MN_CPU_UPDATE_NZ(cpu->a);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0xAE:
             /* LDX */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->x = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+            MN_CPU_ABS_READ({
+                cpu->x = tmp;
 
-                    MN_CPU_UPDATE_NZ(cpu->x);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
             break;
 
         case 0xCC:
             /* CPY */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
-
-                    MN_CPU_CMP(cpu->y, tmp);
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                MN_CPU_CMP(cpu->y, tmp);
+            });
             break;
 
         case 0xCD:
             /* CMP */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
-
-                    MN_CPU_CMP(cpu->a, tmp);
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                MN_CPU_CMP(cpu->a, tmp);
+            });
             break;
 
         case 0xEC:
             /* CPX */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
-
-                    MN_CPU_CMP(cpu->x, tmp);
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                MN_CPU_CMP(cpu->x, tmp);
+            });
             break;
 
         case 0xED:
             /* SBC */
-            switch(cpu->cycle){
-                case 2:
-                    cpu->target_cycle = 4;
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
-
-                    MN_CPU_ADC(~tmp);
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                MN_CPU_ADC(~tmp);
+                break;
+            });
             break;
 
         /* Absolute addressing - read-modify-write (RMW) instructions */
