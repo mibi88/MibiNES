@@ -198,6 +198,27 @@ int mn_cpu_init(MNCPU *cpu) {
         } \
     }
 
+#define MN_CPU_ZP_RMW(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 2: \
+                cpu->target_cycle = 5; \
+                cpu->pc++; \
+                cpu->tmp = cpu->t; \
+                break; \
+            case 3: \
+                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                break; \
+            case 4: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                op; \
+                break; \
+            case 5: \
+                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                break; \
+        } \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -1077,6 +1098,52 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             break;
 
         /* Zeropage addressing - RMW instructions */
+
+        case 0x06:
+            /* ASL */
+            MN_CPU_ZP_RMW({
+                MN_CPU_ASL(cpu->t);
+            });
+            break;
+
+        case 0x26:
+            /* ROL */
+            MN_CPU_ZP_RMW({
+                MN_CPU_ROL(cpu->t);
+            });
+            break;
+
+        case 0x46:
+            /* LSR */
+            MN_CPU_ZP_RMW({
+                MN_CPU_LSR(cpu->t);
+            });
+            break;
+
+        case 0x66:
+            /* ROR */
+            MN_CPU_ZP_RMW({
+                MN_CPU_ROR(cpu->t);
+            });
+            break;
+
+        case 0xC6:
+            /* DEC */
+            MN_CPU_ZP_RMW({
+                cpu->t--;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
+
+        case 0xE6:
+            /* INC */
+            MN_CPU_ZP_RMW({
+                cpu->t++;
+
+                MN_CPU_UPDATE_NZ(cpu->t);
+            });
+            break;
 
         /* Zeropage addressing - write instructions */
 
