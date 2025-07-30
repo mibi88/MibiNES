@@ -37,8 +37,21 @@
 
 #include <emu.h>
 
+enum {
+    MN_PPU_CTRL,
+    MN_PPU_MASK,
+    MN_PPU_STATUS,
+    MN_PPU_OAMADDR,
+    MN_PPU_OAMDATA,
+    MN_PPU_PPUSCROLL,
+    MN_PPU_PPUADDR,
+    MN_PPU_PPUDATA
+};
+
 int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color));
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu);
+unsigned char mn_ppu_read(MNPPU *ppu, unsigned short int reg);
+void mn_ppu_write(MNPPU *ppu, unsigned short int reg, unsigned char value);
 void mn_ppu_free(MNPPU *ppu);
 
 #endif /* MN_PPU_H */

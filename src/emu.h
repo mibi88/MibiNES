@@ -61,6 +61,16 @@ typedef struct {
 
     unsigned char cycle;
 
+    unsigned short int since_start;
+
+    unsigned short int startup_time;
+
+    /* Internal registers */
+    unsigned int w : 15;
+    unsigned int t : 15;
+    unsigned int x : 3;
+    unsigned int w : 1;
+
     void (*draw_pixel)(long int color);
 } MNPPU;
 

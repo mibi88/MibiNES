@@ -41,9 +41,19 @@ int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color)) {
     ppu->draw_pixel = draw_pixel;
     ppu->cycle = 0;
 
+    ppu->since_start = 0;
+    ppu->startup_time = 29658;
+
     return 0;
 }
 
+/*
+ * Border region:
+ * 16 pixels left
+ * 11 pixels right
+ * 2 pixels  down
+ *
+ */
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     /* TODO */
     if(ppu->cycle >= 3){
@@ -54,6 +64,53 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     ppu->draw_pixel(0xAAAAAA);
 
     ppu->cycle++;
+}
+
+unsigned char mn_ppu_read(MNPPU *ppu, unsigned short int reg) {
+    switch(reg){
+        case MN_PPU_CTRL:
+            break;
+        case MN_PPU_MASK:
+            break;
+        case MN_PPU_STATUS:
+            break;
+        case MN_PPU_OAMADDR:
+            break;
+        case MN_PPU_OAMDATA:
+            break;
+        case MN_PPU_PPUSCROLL:
+            break;
+        case MN_PPU_PPUADDR:
+            break;
+        case MN_PPU_PPUDATA:
+            break;
+    }
+    return 0;
+}
+
+void mn_ppu_write(MNPPU *ppu, unsigned short int reg, unsigned char value) {
+    switch(reg){
+        case MN_PPU_CTRL:
+            if(ppu->since_start < ppu->startup_time) break;
+            break;
+        case MN_PPU_MASK:
+            if(ppu->since_start < ppu->startup_time) break;
+            break;
+        case MN_PPU_STATUS:
+            break;
+        case MN_PPU_OAMADDR:
+            break;
+        case MN_PPU_OAMDATA:
+            break;
+        case MN_PPU_PPUSCROLL:
+            if(ppu->since_start < ppu->startup_time) break;
+            break;
+        case MN_PPU_PPUADDR:
+            if(ppu->since_start < ppu->startup_time) break;
+            break;
+        case MN_PPU_PPUDATA:
+            break;
+    }
 }
 
 void mn_ppu_free(MNPPU *ppu) {

@@ -35,7 +35,7 @@
 #include <cpu.h>
 
 int mn_cpu_init(MNCPU *cpu) {
-    cpu->pc = 0x8000;
+    cpu->pc = 0;
     cpu->jammed = 0;
 
     cpu->cycle = 8;

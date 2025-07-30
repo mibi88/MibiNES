@@ -36,6 +36,8 @@
 
 #include <emu.h>
 
+#include <ppu.h>
+
 #include <stdlib.h>
 
 #define MN_NROM_RAM_SIZE 0x800
@@ -51,6 +53,9 @@ typedef struct {
 
     unsigned int chr_ram : 1;
 } MNNROM;
+
+static unsigned char mn_nrom_read(void *_emu, void *_mapper,
+                                  unsigned short int addr);
 
 static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
                         size_t size) {
@@ -90,7 +95,8 @@ static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
         return 1;
     }
 
-    emu->cpu.pc = 0x8000;
+    emu->cpu.pc = mn_nrom_read(_emu, _mapper, 0xFFFC)|
+                  (mn_nrom_read(_emu, _mapper, 0xFFFD)<<8);
 
     return 0;
 }
@@ -98,7 +104,7 @@ static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
 static unsigned char mn_nrom_read(void *_emu, void *_mapper,
                                   unsigned short int addr) {
     MNNROM *rom = ((MNMapper*)_mapper)->data;
-    (void)_emu;
+    MNEmu *emu = _emu;
 
     if(addr >= 0x8000){
         return (rom->bus = rom->rom[rom->prg_rom_start+(addr-0x8000)%
@@ -108,7 +114,7 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
     }else if(addr < 0x2000){
         return (rom->bus = rom->ram[addr%0x0800]);
     }else if(addr < 0x4000){
-        /* TODO: Read from the PPU. The register is addr&7. */
+        return (rom->bus = mn_ppu_read(&emu->ppu, addr&7));
     }else if(addr < 0x4018){
         /* TODO: Read from the APU. */
     }else if(addr < 0x4020){
@@ -122,7 +128,7 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
 static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
                           unsigned char value) {
     MNNROM *rom = ((MNMapper*)_mapper)->data;
-    (void)_emu;
+    MNEmu *emu = _emu;
 
     if(addr < 0x0800){
         rom->ram[addr] = value;
@@ -131,7 +137,8 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
         rom->ram[addr%0x0800] = value;
         rom->bus = value;
     }else if(addr < 0x4000){
-        /* TODO: Write to the PPU. The register is addr&7. */
+        mn_ppu_write(&emu->ppu, addr&7, value);
+        rom->bus = value;
     }else if(addr < 0x4018){
         /* TODO: Write to the APU. */
     }else if(addr < 0x4020){
