@@ -42,6 +42,10 @@ typedef struct {
     unsigned char (*read)(void *_emu, void *_mapper, unsigned short int addr);
     void (*write)(void *_emu, void *_mapper, unsigned short int addr,
                   unsigned char value);
+    unsigned char (*vram_read)(void *_emu, void *_mapper,
+                               unsigned short int addr);
+    void (*vram_write)(void *_emu, void *_mapper, unsigned short int addr,
+                  unsigned char value);
     void (*reset)(void *_emu, void *_mapper);
     void (*hard_reset)(void *_emu, void *_mapper);
     void (*free)(void *_emu, void *_mapper);

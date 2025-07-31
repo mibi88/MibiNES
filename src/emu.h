@@ -72,17 +72,47 @@ typedef struct {
     unsigned char io_bus;
     unsigned char video_mem_bus;
 
-    unsigned char cycle;
+    unsigned char cycles_since_cpu_cycle;
+
+    unsigned short int scanline;
+    unsigned short int cycle;
 
     unsigned short int since_start;
 
     unsigned short int startup_time;
 
     /* Internal registers */
-    unsigned int v : 15;
-    unsigned int t : 15;
-    unsigned int x : 3;
-    unsigned int w : 1;
+    unsigned int v : 15; /* Current vram address */
+    unsigned int t : 15; /* Temorary vram address */
+    unsigned int x : 3;  /* Fine X scroll */
+    unsigned int w : 1;  /* First or second write toggle */
+
+    unsigned char tile_id;
+    unsigned char attr;
+    /* The low and high bitplanes for that tile ID */
+    unsigned char low_bp, high_bp;
+
+    unsigned int low_shift : 16;
+    unsigned int high_shift : 16;
+
+    unsigned int attr_latch1 : 1;
+    unsigned int attr_latch2 : 1;
+
+    unsigned int attr1_shift : 8;
+    unsigned int attr2_shift : 8;
+
+    /* Pixel output is delayed 4 cycles further. */
+    unsigned char pixel_out[4];
+
+    unsigned int even_frame : 1;
+
+    unsigned int trigger_nmi : 1;
+    unsigned int vblank : 1;
+
+    unsigned char ctrl;
+    unsigned char mask;
+
+    unsigned char *palette;
 
     void (*draw_pixel)(long int color);
 } MNPPU;
@@ -113,7 +143,8 @@ enum {
 };
 
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
-                unsigned char *rom, size_t size, int pal);
+                unsigned char *rom, unsigned char *palette, size_t size,
+                int pal);
 void mn_emu_pixel(MNEmu *emu);
 void mn_emu_free(MNEmu *emu);
 

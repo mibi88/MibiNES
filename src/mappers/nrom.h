@@ -37,6 +37,8 @@
 
 #include <mapper.h>
 
+#define MN_NROM_DEBUG_RW 0
+
 extern MNMapper mn_mapper_nrom;
 
 #endif /* MN_MAPPER_NROM_H */

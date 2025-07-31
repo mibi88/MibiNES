@@ -36,13 +36,19 @@
 
 #include <cpu.h>
 
-int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color)) {
+int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
+                void draw_pixel(long int color)) {
     /* TODO */
     ppu->draw_pixel = draw_pixel;
-    ppu->cycle = 0;
+    ppu->cycles_since_cpu_cycle = 0;
 
     ppu->since_start = 0;
     ppu->startup_time = 29658;
+
+    ppu->cycle = 0;
+    ppu->scanline = 261;
+
+    ppu->palette = palette;
 
     return 0;
 }
@@ -55,15 +61,58 @@ int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color)) {
  *
  */
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
-    /* TODO */
-    if(ppu->cycle >= 3){
-        mn_cpu_cycle(&emu->cpu, emu);
-        ppu->cycle = 0;
+    MNCPU *cpu = &emu->cpu;
+
+    if(ppu->scanline <= 239 || ppu->scanline == 261){
+        /* Visible scanlines or pre-render scanline */
+
+        if(ppu->scanline == 261){
+            if(ppu->cycle == 1){
+                ppu->vblank = 0;
+                cpu->nmi_pin = 0;
+            }
+            if(ppu->cycle >= 280 && cpu->cycle <= 304){
+                /* The PPU repeatedly copies these bits in these cycles of the
+                 * pre-render scanline. */
+                ppu->v &= ~((((1<<4)-1)<<11)|((1<<5)-1)<<5);
+                ppu->v |= cpu->t&((((1<<4)-1)<<11)|((1<<5)-1)<<5);
+            }
+        }
+        if(ppu->cycle == 0){
+            /* Cycle 0 is an IDLE cycle */
+        }else if(ppu->cycle <= 256){
+            if(ppu->cycle == 256){
+                /* Increment Y */
+            }
+        }else if(ppu->cycle == 257){
+            ppu->v &= ~(((1<<5)-1)|(1<<10));
+            ppu->v |= ppu->t&(((1<<5)-1)|(1<<10));
+        }
+    }else if(ppu->scanline == 240){
+        /* Post-render scanline */
+    }else if(ppu->scanline <= 260){
+        if(ppu->scanline == 241 && ppu->cycle == 1){
+            /* Set the VBlank flag and trigger NMI */
+            ppu->vblank = 1;
+            cpu->nmi_pin = 1;
+        }
+        /* Vertical blanking lines */
     }
 
-    ppu->draw_pixel(0xAAAAAA);
-
     ppu->cycle++;
+    if(ppu->cycle > 240){
+        ppu->cycle = 0;
+        ppu->scanline++;
+        if(ppu->scanline > 261) ppu->scanline = 0;
+    }
+
+    /* Let the CPU run all 3 PPU cycles */
+    if(ppu->cycles_since_cpu_cycle >= 3){
+        mn_cpu_cycle(&emu->cpu, emu);
+        ppu->cycles_since_cpu_cycle = 0;
+    }
+
+    ppu->cycles_since_cpu_cycle++;
 }
 
 unsigned char mn_ppu_read(MNPPU *ppu, unsigned short int reg) {
@@ -73,6 +122,7 @@ unsigned char mn_ppu_read(MNPPU *ppu, unsigned short int reg) {
         case MN_PPU_MASK:
             break;
         case MN_PPU_STATUS:
+            return 0xFF;
             break;
         case MN_PPU_OAMADDR:
             break;
@@ -92,11 +142,14 @@ void mn_ppu_write(MNPPU *ppu, unsigned short int reg, unsigned char value) {
     switch(reg){
         case MN_PPU_CTRL:
             if(ppu->since_start < ppu->startup_time) break;
+            ppu->t &= (1<<10)|(1<<11);
+            ppu->t |= (value&3)<<10;
             break;
         case MN_PPU_MASK:
             if(ppu->since_start < ppu->startup_time) break;
             break;
         case MN_PPU_STATUS:
+            ppu->w = 0;
             break;
         case MN_PPU_OAMADDR:
             break;
@@ -104,11 +157,41 @@ void mn_ppu_write(MNPPU *ppu, unsigned short int reg, unsigned char value) {
             break;
         case MN_PPU_PPUSCROLL:
             if(ppu->since_start < ppu->startup_time) break;
+            if(ppu->w){
+                /* 2nd write */
+                ppu->t &= ~((7<<12)|(((1<<5)-1)<<5));
+                ppu->t |= (value&7)<<12;
+                ppu->t |= (value&((1<<5)-1))<<5;
+                ppu->w = 0;
+            }else{
+                ppu->t &= ~7;
+                ppu->t |= value>>3;
+                ppu->x = value;
+                ppu->w = 1;
+            }
             break;
         case MN_PPU_PPUADDR:
             if(ppu->since_start < ppu->startup_time) break;
+            if(ppu->w){
+                /* 2nd write */
+                ppu->t &= ~0xFF;
+                ppu->t |= value;
+                ppu->v = ppu->t;
+                ppu->w = 0;
+            }else{
+                ppu->t &= ~(((1<<7)-1)<<8);
+                ppu->t |= value&((1<<6)-1);
+                ppu->w = 1;
+            }
             break;
         case MN_PPU_PPUDATA:
+            if(ppu->scanline < 240 || ppu->scanline == 261){
+                /* The PPU is rendering */
+                /* Perform coarse X increment and Y increment + trigger a load
+                 * next value */
+            }else{
+                ppu->v += ppu->ctrl&MN_PPU_CTRL_INC ? 32 : 1;
+            }
             break;
     }
 }

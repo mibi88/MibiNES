@@ -75,7 +75,7 @@ static unsigned long mn_gui_get_time(void) {
     return time.tv_nsec/(1e6)+time.tv_sec*1000;
 }
 
-int mn_gui_init(unsigned char *rom, size_t size) {
+int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
     XSetWindowAttributes attr;
 
     w = W;
@@ -86,7 +86,7 @@ int mn_gui_init(unsigned char *rom, size_t size) {
 
     last_time = mn_gui_get_time();
 
-    if(mn_emu_init(&emu, mn_gui_pixel, rom, size, 0)){
+    if(mn_emu_init(&emu, mn_gui_pixel, rom, palette, size, 0)){
         return 1;
     }
 
@@ -290,7 +290,22 @@ void mn_gui_run(void) {
             for(i=0;i<W*H;i++){
                 mn_emu_pixel(&emu);
                 if(emu.cpu.jammed && !message){
-                    fputs("CPU jammed!\n", stderr);
+                    fprintf(stderr, "CPU jammed! opcode: %02x pc: %04x\n",
+                            emu.cpu.opcode, emu.cpu.pc);
+#if MN_GUI_DUMP
+                    {
+                        size_t i, n;
+                        puts("Dump:");
+                        for(i=0;i<0xFFFF;i+=0x10){
+                            printf("%04lx: ", i);
+                            for(n=0;n<0x10;n++){
+                                printf("%02x ", emu.mapper.read(&emu,
+                                       &emu.mapper, i+n));
+                            }
+                            puts("");
+                        }
+                    }
+#endif
                     message = 1;
                 }
             }

@@ -37,7 +37,9 @@
 
 #include <stddef.h>
 
-int mn_gui_init(unsigned char *rom, size_t size);
+#define MN_GUI_DUMP 0
+
+int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size);
 void mn_gui_pixel(long int color);
 void mn_gui_run(void);
 void mn_gui_free(void);

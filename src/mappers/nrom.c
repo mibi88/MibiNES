@@ -41,10 +41,13 @@
 #include <stdlib.h>
 
 #define MN_NROM_RAM_SIZE 0x800
+#define MN_NROM_VRAM_SIZE (0x400*2+0x20)
 
 typedef struct {
     unsigned char ram[MN_NROM_RAM_SIZE];
+    unsigned char vram[MN_NROM_VRAM_SIZE];
     unsigned char *rom;
+    unsigned char *chr;
     size_t size;
     size_t prg_rom_start;
     size_t prg_rom_size;
@@ -68,6 +71,7 @@ static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
     if(nrom == NULL) return 1;
 
     mn_mapper_ram_init(nrom->ram, MN_NROM_RAM_SIZE);
+    mn_mapper_ram_init(nrom->vram, MN_NROM_VRAM_SIZE);
     nrom->rom = rom;
     nrom->size = size;
 
@@ -86,8 +90,14 @@ static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
     if(!rom[5]){
         nrom->chr_ram = 1;
         nrom->chr_rom_size = 0;
+        nrom->chr = malloc(0x2000);
+        mn_mapper_ram_init(nrom->chr, 0x2000);
+        if(nrom->chr == NULL){
+            return 1;
+        }
     }else{
         nrom->chr_rom_size = rom[5]*8*1024;
+        nrom->chr = rom+nrom->prg_rom_start+nrom->prg_rom_size;
     }
 
     if(size < nrom->prg_rom_start+nrom->prg_rom_size+nrom->chr_rom_size){
@@ -105,6 +115,10 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
                                   unsigned short int addr) {
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     MNEmu *emu = _emu;
+
+#if MN_NROM_DEBUG_RW
+    printf("<- %02x\n", addr);
+#endif
 
     if(addr >= 0x8000){
         return (rom->bus = rom->rom[rom->prg_rom_start+(addr-0x8000)%
@@ -130,6 +144,10 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     MNEmu *emu = _emu;
 
+#if MN_NROM_DEBUG_RW
+    printf("*%04x = %02x\n", addr, value);
+#endif
+
     if(addr < 0x0800){
         rom->ram[addr] = value;
         rom->bus = value;
@@ -148,12 +166,40 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
     /* Unmapped space */
 }
 
+static unsigned char mn_nrom_vram_read(void *_emu, void *_mapper,
+                                       unsigned short int addr) {
+    MNNROM *rom = ((MNMapper*)_mapper)->data;
+    (void)_emu;
+
+    if(addr < 0x2000){
+        return rom->chr[addr];
+    }else if(addr < 0x3F20){
+        return rom->vram[addr-0x2000];
+    }else{
+        return rom->vram[0x800+(addr&0x1F)];
+    }
+}
+static void mn_nrom_vram_write(void *_emu, void *_mapper,
+                               unsigned short int addr, unsigned char value) {
+    MNNROM *rom = ((MNMapper*)_mapper)->data;
+    (void)_emu;
+
+    if(addr < 0x2000){
+        rom->chr[addr] = value;
+    }else if(addr < 0x3F20){
+        rom->vram[addr-0x2000] = value;
+    }else{
+        rom->vram[0x800+(addr&0x1F)] = value;
+    }
+}
+
 static void mn_nrom_reset(void *_emu, void *_mapper) {
     /* TODO */
     MNEmu *emu = _emu;
     (void)_mapper;
 
-    emu->cpu.pc = 0x8000;
+    emu->cpu.pc = mn_nrom_read(_emu, _mapper, 0xFFFC)|
+                  (mn_nrom_read(_emu, _mapper, 0xFFFD)<<8);
 }
 
 static void mn_nrom_hard_reset(void *_emu, void *_mapper) {
@@ -161,7 +207,8 @@ static void mn_nrom_hard_reset(void *_emu, void *_mapper) {
     MNEmu *emu = _emu;
     (void)_mapper;
 
-    emu->cpu.pc = 0x8000;
+    emu->cpu.pc = mn_nrom_read(_emu, _mapper, 0xFFFC)|
+                  (mn_nrom_read(_emu, _mapper, 0xFFFD)<<8);
 }
 
 void mn_nrom_free(void *_emu, void *_mapper) {
@@ -174,6 +221,8 @@ MNMapper mn_mapper_nrom = {
     mn_nrom_init,
     mn_nrom_read,
     mn_nrom_write,
+    mn_nrom_vram_read,
+    mn_nrom_vram_write,
     mn_nrom_reset,
     mn_nrom_hard_reset,
     mn_nrom_free,

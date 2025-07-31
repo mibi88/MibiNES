@@ -60,3 +60,8 @@ HEX   0/8   1/9   2/a   3/b   4/c   5/d   6/e   7/f
 
 This table was generated with the python code in tablegen.py. The supported
 opcodes however were added to this table by hand.
+
+    SPECIAL THANKS
+
+Special thanks to Fiskbit, lidnariq and Zeta from the NesDev community for
+their help.

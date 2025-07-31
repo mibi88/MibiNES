@@ -34,8 +34,10 @@
 
 #include <cpu.h>
 
+#if MN_CPU_DEBUG
 /* NOTE: For debugging only */
 #include <stdio.h>
+#endif
 
 int mn_cpu_init(MNCPU *cpu) {
     cpu->pc = 0;
@@ -59,13 +61,21 @@ int mn_cpu_init(MNCPU *cpu) {
     return 0;
 }
 
+
+#if MN_CPU_DEBUG && MN_CPU_REPORT_POLLING
+/* TODO: Choose another define name */
+#undef MN_CPU_REPORT_POLLING
+#define MN_CPU_REPORT_POLLING puts("poll");
+#else
+#undef MN_CPU_REPORT_POLLING
+#define MN_CPU_REPORT_POLLING
+#endif
+
 #define MN_CPU_INTPOLL() \
     { \
-        if(!(cpu->p&MN_CPU_I)){ \
-            puts("poll"); \
-            if(cpu->should_nmi || cpu->should_irq){ \
-                cpu->execute_int_next = 1; \
-            } \
+        MN_CPU_REPORT_POLLING \
+        if(cpu->should_nmi || (cpu->should_irq && !(cpu->p&MN_CPU_I))){ \
+            cpu->execute_int_next = 1; \
         } \
     }
 
@@ -378,7 +388,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 break; \
             case 4: \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                emu->mapper.write(emu, &emu->mapper, cpu->t, tmp); \
                 break; \
         } \
     }
@@ -413,6 +423,7 @@ int mn_cpu_init(MNCPU *cpu) {
             case 5: \
                 /* Only executed if a page boundary had been crossed */ \
                 tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                printf("r: %02x\n", tmp); \
                 op; \
                 break; \
         } \
@@ -498,7 +509,7 @@ int mn_cpu_init(MNCPU *cpu) {
                     if(cpu->t&(1<<7)){ \
                         cpu->tmp = cpu->pc-(256-cpu->t); \
                     }else{ \
-                        cpu->tmp = cpu->pc+cpu->t+1; \
+                        cpu->tmp = cpu->pc+cpu->t; \
                     } \
                     cpu->pc = (cpu->tmp&0xFF)|(cpu->pc&0xFF00); \
                     if(cpu->pc != cpu->tmp){ \
@@ -702,6 +713,18 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
     }else if(cpu->cycle > cpu->target_cycle){
         cpu->opcode = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+#if MN_CPU_DEBUG && !MN_CPU_CYCLE_DETAIL
+        printf("%c%c%c%c%c-%c%c op: %02x pc: %04x a: %02x x: %02x "
+               "y: %02x\n",
+               cpu->p&MN_CPU_C ? 'C' : '-',
+               cpu->p&MN_CPU_Z ? 'Z' : '-',
+               cpu->p&MN_CPU_I ? 'I' : '-',
+               cpu->p&MN_CPU_D ? 'D' : '-',
+               cpu->p&MN_CPU_B ? 'B' : '-',
+               cpu->p&MN_CPU_N ? 'N' : '-',
+               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc, cpu->a,
+               cpu->x, cpu->y);
+#endif
         cpu->pc++;
         cpu->cycle = 1;
         cpu->target_cycle = 2;
@@ -753,6 +776,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                 cpu->execute_int = 0;
                 break;
         }
+        cpu->cycle++;
         return;
     }
 
@@ -2080,12 +2104,14 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                     cpu->pc++;
                     break;
                 case 4:
-                    cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
                     break;
                 case 5:
                     cpu->pc = emu->mapper.read(emu, &emu->mapper,
-                                               cpu->tmp)<<8;
+                                               (cpu->tmp&0xFF00)|
+                                               ((cpu->tmp+1)&0xFF))<<8;
                     cpu->pc |= cpu->t;
+                    printf("%04x\n", cpu->pc);
                     break;
             }
             break;
@@ -2223,14 +2249,18 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
             cpu->jammed = 1;
     }
 
-    printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %u\n", cpu->cycle,
+#if MN_CPU_DEBUG && MN_CPU_CYCLE_DETAIL
+    printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %04x a: %02x x: %02x "
+           "y: %02x\n", cpu->cycle,
            cpu->p&MN_CPU_C ? 'C' : '-',
            cpu->p&MN_CPU_Z ? 'Z' : '-',
            cpu->p&MN_CPU_I ? 'I' : '-',
            cpu->p&MN_CPU_D ? 'D' : '-',
            cpu->p&MN_CPU_B ? 'B' : '-',
            cpu->p&MN_CPU_N ? 'N' : '-',
-           cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
+           cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc, cpu->a, cpu->x,
+           cpu->y);
+#endif
 
     if((cpu->opcode&31) != 16 && cpu->opcode &&
        cpu->cycle == cpu->target_cycle-1){

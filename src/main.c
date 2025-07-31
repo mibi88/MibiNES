@@ -37,39 +37,64 @@
 
 #include <gui.h>
 
-int main(int argc, char **argv) {
+unsigned char *load_file(char *name, char *file, size_t *s) {
     FILE *fp;
-
-    unsigned char *rom;
+    unsigned char *buffer;
     size_t size;
 
-    if(argc < 2){
-        fprintf(stderr, "USAGE: %s [ROM]\nA small NES emulator\n", argv[0]);
-
-        return EXIT_FAILURE;
-    }
-
-    fp = fopen(argv[1], "rb");
+    fp = fopen(file, "rb");
     if(fp == NULL){
-        fprintf(stderr, "%s: Failed to load \"%s\"!\n", argv[0], argv[1]);
+        fprintf(stderr, "%s: Failed to load \"%s\"!\n", name, file);
 
-        return EXIT_FAILURE;
+        return NULL;
     }
 
     fseek(fp, 0, SEEK_END);
     size = ftell(fp);
     rewind(fp);
 
-    rom = malloc(size);
-    if(rom == NULL){
-        fprintf(stderr, "%s: Failed to allocate %lu bytes!\n", argv[0], size);
+    buffer = malloc(size);
+    if(buffer == NULL){
+        fprintf(stderr, "%s: Failed to allocate %lu bytes!\n", name, size);
+
+        return NULL;
+    }
+
+    fread(buffer, 1, size, fp);
+
+    *s = size;
+
+    return buffer;
+}
+
+int main(int argc, char **argv) {
+    unsigned char *rom;
+    unsigned char *palette;
+    size_t size;
+    size_t palette_size;
+
+    if(argc < 3){
+        fprintf(stderr, "USAGE: %s [ROM] [PALETTE]\nA small NES emulator\n",
+                argv[0]);
 
         return EXIT_FAILURE;
     }
 
-    fread(rom, 1, size, fp);
+    rom = load_file(argv[0], argv[1], &size);
+    if(rom == NULL){
+        return EXIT_FAILURE;
+    }
 
-    if(mn_gui_init(rom, size)){
+    palette = load_file(argv[0], argv[2], &palette_size);
+    if(palette == NULL){
+        return EXIT_FAILURE;
+    }
+    if(palette_size < 0x600){
+        fprintf(stderr, "%s: Bad palette size. Size must be 1536 bytes!\n",
+                argv[0]);
+    }
+
+    if(mn_gui_init(rom, palette, size)){
         fprintf(stderr, "%s: Failed to initialize %s!\n", argv[0], argv[0]);
 
         free(rom);

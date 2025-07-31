@@ -39,13 +39,16 @@
 #include <apu.h>
 
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
-                unsigned char *rom, size_t size, int pal) {
+                unsigned char *rom, unsigned char *palette, size_t size,
+                int pal) {
     emu->pal = pal;
 
     if(mn_cpu_init(&emu->cpu)){
         return MN_EMU_E_CPU;
     }
-    if(mn_ppu_init(&emu->ppu, draw_pixel)){
+    emu->cpu.irq_pin = 1; /* /IRQ is kept high */
+    emu->cpu.nmi_pin = 1;
+    if(mn_ppu_init(&emu->ppu, palette, draw_pixel)){
         return MN_EMU_E_PPU;
     }
     if(mn_apu_init(&emu->apu)){

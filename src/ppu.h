@@ -48,7 +48,13 @@ enum {
     MN_PPU_PPUDATA
 };
 
-int mn_ppu_init(MNPPU *ppu, void draw_pixel(long int color));
+enum {
+    /* TODO: Add masks for all other flags */
+    MN_PPU_CTRL_INC = 1<<2
+};
+
+int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
+                void draw_pixel(long int color));
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu);
 unsigned char mn_ppu_read(MNPPU *ppu, unsigned short int reg);
 void mn_ppu_write(MNPPU *ppu, unsigned short int reg, unsigned char value);
