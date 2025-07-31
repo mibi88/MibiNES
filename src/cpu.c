@@ -34,6 +34,9 @@
 
 #include <cpu.h>
 
+/* NOTE: For debugging only */
+#include <stdio.h>
+
 int mn_cpu_init(MNCPU *cpu) {
     cpu->pc = 0;
     cpu->jammed = 0;
@@ -45,8 +48,26 @@ int mn_cpu_init(MNCPU *cpu) {
     cpu->nmi_pin = 0;
     cpu->nmi_pin_last = 0;
 
+    cpu->should_nmi = 0;
+    cpu->should_irq = 0;
+    cpu->nmi_detected = 0;
+    cpu->irq_detected = 0;
+
+    cpu->execute_int_next = 0;
+    cpu->execute_int = 0;
+
     return 0;
 }
+
+#define MN_CPU_INTPOLL() \
+    { \
+        if(!(cpu->p&MN_CPU_I)){ \
+            puts("poll"); \
+            if(cpu->should_nmi || cpu->should_irq){ \
+                cpu->execute_int_next = 1; \
+            } \
+        } \
+    }
 
 #define MN_CPU_UPDATE_NZ(reg) \
     { \
@@ -466,6 +487,7 @@ int mn_cpu_init(MNCPU *cpu) {
         switch(cpu->cycle) { \
             case 1: \
                 cpu->target_cycle = 3; \
+                MN_CPU_INTPOLL(); \
                 break; \
             case 2: \
                 cpu->pc++; \
@@ -479,6 +501,9 @@ int mn_cpu_init(MNCPU *cpu) {
                         cpu->tmp = cpu->pc+cpu->t+1; \
                     } \
                     cpu->pc = (cpu->tmp&0xFF)|(cpu->pc&0xFF00); \
+                    if(cpu->pc != cpu->tmp){ \
+                        MN_CPU_INTPOLL(); \
+                    } \
                     cpu->target_cycle++; \
                 }else{ \
                     cpu->opcode = tmp; \
@@ -669,6 +694,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
     if(cpu->jammed) return;
 
+    /* The internal signals are raised during phi 1 of each cycle */
+    if(cpu->nmi_detected) cpu->should_nmi = 1;
+    if(cpu->irq_detected) cpu->should_irq = 1;
+
     if(cpu->cycle == 2){
         cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
     }else if(cpu->cycle > cpu->target_cycle){
@@ -676,6 +705,55 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         cpu->pc++;
         cpu->cycle = 1;
         cpu->target_cycle = 2;
+        if(cpu->execute_int_next){
+            cpu->execute_int = 1;
+            cpu->execute_int_next = 0;
+        }
+    }
+
+    if(cpu->execute_int){
+        switch(cpu->cycle){
+            case 1:
+                cpu->target_cycle = 7;
+                break;
+            case 2:
+                cpu->pc++;
+                break;
+            case 3:
+                emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
+                                  cpu->pc>>8);
+                cpu->s--;
+                break;
+            case 4:
+                emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
+                                  cpu->pc);
+                cpu->s--;
+                cpu->is_irq = 1;
+                if(cpu->should_nmi){
+                    cpu->is_irq = 0;
+                    cpu->should_nmi = 0;
+                }
+                break;
+            case 5:
+                emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
+                                  cpu->p);
+                cpu->s--;
+                break;
+            case 6:
+                cpu->pc &= 0xFF00;
+                cpu->pc |= emu->mapper.read(emu, &emu->mapper,
+                                            cpu->is_irq ? 0xFFFE : 0xFFFA);
+                break;
+            case 7:
+                cpu->pc &= 0xFF;
+                cpu->pc |= emu->mapper.read(emu, &emu->mapper,
+                                            cpu->is_irq ?
+                                            0xFFFF : 0xFFFB)<<8;
+                if(!cpu->is_irq) cpu->should_nmi = 0;
+                cpu->execute_int = 0;
+                break;
+        }
+        return;
     }
 
     /* XXX: Maybe it would be better to use a LUT. */
@@ -700,6 +778,11 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                     emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
                                       cpu->pc);
                     cpu->s--;
+                    cpu->is_irq = 1;
+                    if(cpu->should_nmi){
+                        cpu->is_irq = 0;
+                        cpu->should_nmi = 0;
+                    }
                     break;
                 case 5:
                     emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
@@ -708,11 +791,15 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
                     break;
                 case 6:
                     cpu->pc &= 0xFF00;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper, 0xFFFE);
+                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
+                                                cpu->is_irq ? 0xFFFE : 0xFFFA);
                     break;
                 case 7:
                     cpu->pc &= 0xFF;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper, 0xFFFF)<<8;
+                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
+                                                cpu->is_irq ?
+                                                0xFFFF : 0xFFFB)<<8;
+                    if(!cpu->is_irq) cpu->should_nmi = 0;
                     break;
             }
             break;
@@ -2145,11 +2232,23 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
            cpu->p&MN_CPU_N ? 'N' : '-',
            cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
 
-    if((cpu->opcode&31) != 16 && cpu->cycle == cpu->target_cycle-1){
-        printf("poll, %u\n", cpu->target_cycle);
+    if((cpu->opcode&31) != 16 && cpu->opcode &&
+       cpu->cycle == cpu->target_cycle-1){
+        MN_CPU_INTPOLL();
     }
 
+    /* The edge detector and level detector polling is performed on phi 2 of
+     * each cycle */
+    cpu->nmi_detected = (cpu->nmi_pin^cpu->nmi_pin_last) && !cpu->nmi_pin;
+    cpu->irq_detected = !cpu->irq_pin;
+
+    /* The internal signal when an IRQ is detected is only high for that
+     * cycle */
+    cpu->should_irq = 0;
+
     cpu->cycle++;
+
+    cpu->nmi_pin_last = cpu->nmi_pin;
 }
 
 void mn_cpu_free(MNCPU *cpu) {

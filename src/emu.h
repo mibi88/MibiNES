@@ -57,6 +57,15 @@ typedef struct {
     unsigned int irq_pin : 1;
     unsigned int nmi_pin : 1;
     unsigned int nmi_pin_last : 1;
+    unsigned int should_nmi : 1;
+    unsigned int should_irq : 1;
+    unsigned int nmi_detected : 1;
+    unsigned int irq_detected : 1;
+
+    unsigned int execute_int_next : 1;
+    unsigned int execute_int: 1;
+
+    unsigned int is_irq : 1;
 } MNCPU;
 
 typedef struct {
