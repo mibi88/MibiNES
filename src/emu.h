@@ -53,6 +53,10 @@ typedef struct {
     unsigned short int tmp, tmp2;
 
     int jammed;
+
+    unsigned int irq_pin : 1;
+    unsigned int nmi_pin : 1;
+    unsigned int nmi_pin_last : 1;
 } MNCPU;
 
 typedef struct {
@@ -66,7 +70,7 @@ typedef struct {
     unsigned short int startup_time;
 
     /* Internal registers */
-    unsigned int w : 15;
+    unsigned int v : 15;
     unsigned int t : 15;
     unsigned int x : 3;
     unsigned int w : 1;

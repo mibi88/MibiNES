@@ -41,6 +41,10 @@ int mn_cpu_init(MNCPU *cpu) {
     cpu->cycle = 8;
     cpu->target_cycle = 0;
 
+    cpu->irq_pin = 0;
+    cpu->nmi_pin = 0;
+    cpu->nmi_pin_last = 0;
+
     return 0;
 }
 
@@ -138,11 +142,38 @@ int mn_cpu_init(MNCPU *cpu) {
         cpu->p |= value&((1<<6)|(1<<7)); \
     }
 
+#define MN_CPU_IMP(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 1: \
+                cpu->target_cycle = 2; \
+                break; \
+            case 2: \
+                op; \
+                break; \
+        } \
+    }
+
+#define MN_CPU_IMM(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 1: \
+                cpu->target_cycle = 2; \
+                break; \
+            case 2: \
+                op; \
+                cpu->pc++; \
+                break; \
+        } \
+    }
+
 #define MN_CPU_ABS_READ(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -162,8 +193,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ABS_RMW(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 6; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -189,8 +222,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ABS_STORE(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -208,8 +243,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ZP_READ(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 3; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -222,8 +259,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ZP_RMW(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 5; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 cpu->tmp = cpu->t; \
                 break; \
@@ -243,8 +282,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ZP_STORE(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 3; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -257,8 +298,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ZPI_READ(i, op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -275,8 +318,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ZPI_RMW(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 6; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -300,8 +345,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ZPI_STORE(i, op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -318,8 +365,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ABSI_READ(i, op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -351,8 +400,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ABSI_RMW(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -384,8 +435,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_ABSI_STORE(i, op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 4; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -411,8 +464,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_RELATIVE(branch) \
     { \
         switch(cpu->cycle) { \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 3; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -449,8 +504,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_IDXIND_READ(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 6; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -474,8 +531,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_IDXIND_RMW(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 6; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -505,8 +564,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_IDXIND_WRITE(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 6; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -530,8 +591,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_INDIDX_READ(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 5; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -564,8 +627,10 @@ int mn_cpu_init(MNCPU *cpu) {
 #define MN_CPU_INDIDX_WRITE(op) \
     { \
         switch(cpu->cycle){ \
-            case 2: \
+            case 1: \
                 cpu->target_cycle = 6; \
+                break; \
+            case 2: \
                 cpu->pc++; \
                 break; \
             case 3: \
@@ -604,36 +669,13 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
     if(cpu->jammed) return;
 
-    if(cpu->cycle == 1){
+    if(cpu->cycle == 2){
         cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
-        cpu->cycle = 2;
-        cpu->target_cycle = 2;
-
-        printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %u\n", cpu->cycle,
-               cpu->p&MN_CPU_C ? 'C' : '-',
-               cpu->p&MN_CPU_Z ? 'Z' : '-',
-               cpu->p&MN_CPU_I ? 'I' : '-',
-               cpu->p&MN_CPU_D ? 'D' : '-',
-               cpu->p&MN_CPU_B ? 'B' : '-',
-               cpu->p&MN_CPU_N ? 'N' : '-',
-               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
-
-        return;
     }else if(cpu->cycle > cpu->target_cycle){
         cpu->opcode = emu->mapper.read(emu, &emu->mapper, cpu->pc);
         cpu->pc++;
         cpu->cycle = 1;
-
-        printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %u\n", cpu->cycle,
-               cpu->p&MN_CPU_C ? 'C' : '-',
-               cpu->p&MN_CPU_Z ? 'Z' : '-',
-               cpu->p&MN_CPU_I ? 'I' : '-',
-               cpu->p&MN_CPU_D ? 'D' : '-',
-               cpu->p&MN_CPU_B ? 'B' : '-',
-               cpu->p&MN_CPU_N ? 'N' : '-',
-               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
-
-        return;
+        cpu->target_cycle = 2;
     }
 
     /* XXX: Maybe it would be better to use a LUT. */
@@ -642,8 +684,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x00:
             /* BRK */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 7;
+                    break;
+                case 2:
                     cpu->pc++;
                     break;
                 case 3:
@@ -676,7 +720,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x40:
             /* RTI */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 6;
                     break;
                 case 3:
@@ -704,7 +748,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x60:
             /* RTS */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 6;
                     break;
                 case 3:
@@ -729,7 +773,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x48:
             /* PHA */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 3;
                     break;
                 case 3:
@@ -743,7 +787,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x08:
             /* PHP */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 3;
                     break;
                 case 3:
@@ -757,7 +801,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x68:
             /* PLA */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 4;
                     break;
                 case 3:
@@ -773,7 +817,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x28:
             /* PLP */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 4;
                     break;
                 case 3:
@@ -789,8 +833,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x20:
             /* JSR */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 6;
+                    break;
+                case 2:
                     cpu->pc++;
                     break;
                 case 4:
@@ -817,216 +863,258 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
 
         case 0x0A:
             /* ASL */
-
-            MN_CPU_ASL(cpu->a);
+            MN_CPU_IMP({
+                MN_CPU_ASL(cpu->a);
+            });
             break;
 
         case 0x18:
             /* CLC */
-            cpu->p &= ~MN_CPU_C;
+            MN_CPU_IMP({
+                cpu->p &= ~MN_CPU_C;
+            });
             break;
 
         case 0x2A:
             /* ROL */
-
-            MN_CPU_ROL(cpu->a);
+            MN_CPU_IMP({
+                MN_CPU_ROL(cpu->a);
+            });
             break;
 
         case 0x38:
             /* SEC */
-            cpu->p |= MN_CPU_C;
+            MN_CPU_IMP({
+                cpu->p |= MN_CPU_C;
+            });
             break;
 
         case 0x4A:
             /* LSR */
-            MN_CPU_LSR(cpu->a);
+            MN_CPU_IMP({
+                MN_CPU_LSR(cpu->a);
+            });
             break;
 
         case 0x58:
             /* CLI */
-            cpu->p &= ~MN_CPU_I;
+            MN_CPU_IMP({
+                cpu->p &= ~MN_CPU_I;
+            });
             break;
 
         case 0x6A:
             /* ROR */
-            MN_CPU_ROR(cpu->a);
+            MN_CPU_IMP({
+                MN_CPU_ROR(cpu->a);
+            });
             break;
 
         case 0x78:
             /* SEI */
-            cpu->p |= MN_CPU_I;
+            MN_CPU_IMP({
+                cpu->p |= MN_CPU_I;
+            });
             break;
 
         case 0x88:
             /* DEY */
-            cpu->y--;
+            MN_CPU_IMP({
+                cpu->y--;
 
-            MN_CPU_UPDATE_NZ(cpu->y);
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
             break;
 
         case 0x8A:
             /* TXA */
-            cpu->a = cpu->x;
+            MN_CPU_IMP({
+                cpu->a = cpu->x;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x98:
             /* TYA */
-            cpu->a = cpu->y;
+            MN_CPU_IMP({
+                cpu->a = cpu->y;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x9A:
             /* TXS */
-            cpu->s = cpu->x;
+            MN_CPU_IMP({
+                cpu->s = cpu->x;
+            });
             break;
 
         case 0xA8:
             /* TAY */
-            cpu->y = cpu->a;
+            MN_CPU_IMP({
+                cpu->y = cpu->a;
 
-            MN_CPU_UPDATE_NZ(cpu->y);
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
             break;
 
         case 0xAA:
             /* TAX */
-            cpu->x = cpu->a;
+            MN_CPU_IMP({
+                cpu->x = cpu->a;
 
-            MN_CPU_UPDATE_NZ(cpu->x);
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
             break;
 
         case 0xB8:
             /* CLV */
-            cpu->p &= ~MN_CPU_V;
+            MN_CPU_IMP({
+                cpu->p &= ~MN_CPU_V;
+            });
             break;
 
         case 0xBA:
             /* TSX */
-            cpu->x = cpu->s;
+            MN_CPU_IMP({
+                cpu->x = cpu->s;
 
-            MN_CPU_UPDATE_NZ(cpu->x);
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
             break;
 
         case 0xC8:
             /* INY */
-            cpu->y++;
+            MN_CPU_IMP({
+                cpu->y++;
 
-            MN_CPU_UPDATE_NZ(cpu->y);
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
             break;
 
         case 0xCA:
             /* DEX */
-            cpu->x++;
+            MN_CPU_IMP({
+                cpu->x++;
 
-            MN_CPU_UPDATE_NZ(cpu->x);
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
             break;
 
         case 0xD8:
             /* CLD */
-            cpu->p &= ~MN_CPU_D;
+            MN_CPU_IMP({
+                cpu->p &= ~MN_CPU_D;
+            });
             break;
 
         case 0xE8:
             /* INX */
-            cpu->x++;
+            MN_CPU_IMP({
+                cpu->x++;
 
-            MN_CPU_UPDATE_NZ(cpu->x);
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
             break;
 
         case 0xEA:
             /* NOP */
+            MN_CPU_IMP({
+                /* Do nothing */
+            });
             break;
 
         case 0xF8:
             /* SED */
-            cpu->p |= MN_CPU_D;
+            MN_CPU_IMP({
+                cpu->p |= MN_CPU_D;
+            });
             break;
 
         /* Opcodes with immediate addressing */
 
         case 0x09:
             /* ORA */
-            cpu->a |= cpu->t;
+            MN_CPU_IMM({
+                cpu->a |= cpu->t;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x29:
             /* AND */
-            cpu->a &= cpu->t;
+            MN_CPU_IMM({
+                cpu->a &= cpu->t;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x49:
             /* EOR */
-            cpu->a ^= cpu->t;
+            MN_CPU_IMM({
+                cpu->a ^= cpu->t;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x69:
             /* ADC */
-
-            MN_CPU_ADC(cpu->t);
-
-            cpu->pc++;
+            MN_CPU_IMM({
+                MN_CPU_ADC(cpu->t);
+            });
             break;
 
         case 0xA0:
             /* LDY */
-            cpu->y = cpu->t;
+            MN_CPU_IMM({
+                cpu->y = cpu->t;
 
-            MN_CPU_UPDATE_NZ(cpu->y);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->y);
+            });
             break;
 
         case 0xA2:
             /* LDX */
-            cpu->x = cpu->t;
+            MN_CPU_IMM({
+                cpu->x = cpu->t;
 
-            MN_CPU_UPDATE_NZ(cpu->x);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->x);
+            });
             break;
 
         case 0xA9:
             /* LDA */
-            cpu->a = cpu->t;
+            MN_CPU_IMM({
+                cpu->a = cpu->t;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0xC0:
             /* CPY */
-            MN_CPU_CMP(cpu->y, cpu->t);
-
-            cpu->pc++;
+            MN_CPU_IMM({
+                MN_CPU_CMP(cpu->y, cpu->t);
+            });
             break;
 
         case 0xC9:
             /* CMP */
-            MN_CPU_CMP(cpu->a, cpu->t);
-
-            cpu->pc++;
+            MN_CPU_IMM({
+                MN_CPU_CMP(cpu->a, cpu->t);
+            });
             break;
 
         case 0xE0:
             /* CPX */
-            MN_CPU_CMP(cpu->x, cpu->t);
-
-            cpu->pc++;
+            MN_CPU_IMM({
+                MN_CPU_CMP(cpu->x, cpu->t);
+            });
             break;
 
         case 0xEB: /* Unofficial opcode */
@@ -1034,8 +1122,9 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
              *  said Fiskbit on the NesDev Discord. */
         case 0xE9:
             /* SBC */
-
-            MN_CPU_ADC(~cpu->t);
+            MN_CPU_IMM({
+                MN_CPU_ADC(~cpu->t);
+            });
             break;
 
         /* Absolute addressing */
@@ -1043,8 +1132,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x4C:
             /* JMP */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 3;
+                    break;
+                case 2:
                     cpu->pc++;
                     break;
                 case 3:
@@ -1890,8 +1981,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x6C:
             /* JMP */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 5;
+                    break;
+                case 2:
                     cpu->pc++;
                     break;
                 case 3:
@@ -1921,6 +2014,9 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0xDA:
         case 0xFA:
             /* NOP */
+            MN_CPU_IMP({
+                /* Do nothing */
+            });
             break;
 
         /* Immediate addressing */
@@ -1930,17 +2026,19 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x89:
         case 0xC2:
             /* NOP */
-            cpu->pc++;
+            MN_CPU_IMM({
+                /* Do nothing */
+            });
             break;
 
         case 0xAB:
             /* LAX */
-            cpu->a = cpu->t;
-            cpu->x = cpu->a;
+            MN_CPU_IMP({
+                cpu->a = cpu->t;
+                cpu->x = cpu->a;
 
-            MN_CPU_UPDATE_NZ(cpu->a);
-
-            cpu->pc++;
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         /* Absolute addressing */
@@ -1948,8 +2046,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0x0C:
             /* NOP */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 4;
+                    break;
+                case 2:
                     cpu->pc++;
                     break;
                 case 3:
@@ -1966,8 +2066,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         case 0xAF:
             /* LAX */
             switch(cpu->cycle){
-                case 2:
+                case 1:
                     cpu->target_cycle = 4;
+                    break;
+                case 2:
                     cpu->pc++;
                     break;
                 case 3:
@@ -2042,6 +2144,10 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
            cpu->p&MN_CPU_B ? 'B' : '-',
            cpu->p&MN_CPU_N ? 'N' : '-',
            cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc);
+
+    if((cpu->opcode&31) != 16 && cpu->cycle == cpu->target_cycle-1){
+        printf("poll, %u\n", cpu->target_cycle);
+    }
 
     cpu->cycle++;
 }
