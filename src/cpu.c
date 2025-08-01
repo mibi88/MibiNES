@@ -430,7 +430,6 @@ int mn_cpu_init(MNCPU *cpu) {
             case 5: \
                 /* Only executed if a page boundary had been crossed */ \
                 tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
-                printf("r: %02x\n", tmp); \
                 op; \
                 break; \
         } \
@@ -2122,7 +2121,6 @@ OPCODE_LOADED:
                                                (cpu->tmp&0xFF00)|
                                                ((cpu->tmp+1)&0xFF))<<8;
                     cpu->pc |= cpu->t;
-                    printf("%04x\n", cpu->pc);
                     break;
             }
             break;

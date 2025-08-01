@@ -132,7 +132,7 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
     }else if(addr < 0x2000){
         return (rom->bus = rom->ram[addr%0x0800]);
     }else if(addr < 0x4000){
-        return (rom->bus = mn_ppu_read(&emu->ppu, addr&7));
+        return (rom->bus = mn_ppu_read(&emu->ppu, emu, addr&7));
     }else if(addr < 0x4018){
         /* TODO: Read from the APU. */
     }else if(addr < 0x4020){
@@ -159,7 +159,7 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
         rom->ram[addr%0x0800] = value;
         rom->bus = value;
     }else if(addr < 0x4000){
-        mn_ppu_write(&emu->ppu, addr&7, value);
+        mn_ppu_write(&emu->ppu, emu, addr&7, value);
         rom->bus = value;
     }else if(addr < 0x4018){
         /* TODO: Write to the APU. */

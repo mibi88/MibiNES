@@ -56,8 +56,9 @@ enum {
 int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 void draw_pixel(long int color));
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu);
-unsigned char mn_ppu_read(MNPPU *ppu, unsigned short int reg);
-void mn_ppu_write(MNPPU *ppu, unsigned short int reg, unsigned char value);
+unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg);
+void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
+                  unsigned char value);
 void mn_ppu_free(MNPPU *ppu);
 
 #endif /* MN_PPU_H */

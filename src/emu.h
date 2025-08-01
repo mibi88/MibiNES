@@ -71,6 +71,7 @@ typedef struct {
 typedef struct {
     unsigned char io_bus;
     unsigned char video_mem_bus;
+    unsigned int addr : 16;
 
     unsigned char cycles_since_cpu_cycle;
 
@@ -104,10 +105,17 @@ typedef struct {
     /* Pixel output is delayed 4 cycles further. */
     unsigned char pixel_out[4];
 
+    unsigned char ext;
+
     unsigned int even_frame : 1;
 
     unsigned int trigger_nmi : 1;
+
     unsigned int vblank : 1;
+    unsigned int sprite0_hit : 1;
+    unsigned int sprite_overflow : 1;
+
+    unsigned int keep_vblank_clear : 1;
 
     unsigned char ctrl;
     unsigned char mask;
@@ -146,6 +154,7 @@ int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
                 unsigned char *rom, unsigned char *palette, size_t size,
                 int pal);
 void mn_emu_pixel(MNEmu *emu);
+void mn_emu_frame(MNEmu *emu);
 void mn_emu_free(MNEmu *emu);
 
 #endif /* MN_EMU_H */

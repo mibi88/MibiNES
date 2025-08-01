@@ -269,8 +269,6 @@ void mn_gui_pixel(long int color) {
 }
 
 void mn_gui_run(void) {
-    size_t i;
-
     int message = 0;
 
     XWindowAttributes win_attr;
@@ -287,27 +285,25 @@ void mn_gui_run(void) {
                 needs_resize = 1;
             }
         }else{
-            for(i=0;i<W*H;i++){
-                mn_emu_pixel(&emu);
-                if(emu.cpu.jammed && !message){
-                    fprintf(stderr, "CPU jammed! opcode: %02x pc: %04x\n",
-                            emu.cpu.opcode, emu.cpu.pc);
+            mn_emu_frame(&emu);
+            if(emu.cpu.jammed && !message){
+                fprintf(stderr, "CPU jammed! opcode: %02x pc: %04x\n",
+                        emu.cpu.opcode, emu.cpu.pc);
 #if MN_GUI_DUMP
-                    {
-                        size_t i, n;
-                        puts("Dump:");
-                        for(i=0;i<0xFFFF;i+=0x10){
-                            printf("%04lx: ", i);
-                            for(n=0;n<0x10;n++){
-                                printf("%02x ", emu.mapper.read(&emu,
-                                       &emu.mapper, i+n));
-                            }
-                            puts("");
+                {
+                    size_t i, n;
+                    puts("Dump:");
+                    for(i=0;i<0xFFFF;i+=0x10){
+                        printf("%04lx: ", i);
+                        for(n=0;n<0x10;n++){
+                            printf("%02x ", emu.mapper.read(&emu,
+                                   &emu.mapper, i+n));
                         }
+                        puts("");
                     }
-#endif
-                    message = 1;
                 }
+#endif
+                message = 1;
             }
         }
     }
