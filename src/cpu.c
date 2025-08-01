@@ -43,6 +43,13 @@ int mn_cpu_init(MNCPU *cpu) {
     cpu->pc = 0;
     cpu->jammed = 0;
 
+    /* TODO: Properly emulate the power on and reset sequences. */
+    cpu->s = 0xFD;
+    cpu->a = 0;
+    cpu->x = 0;
+    cpu->y = 0;
+    cpu->p = MN_CPU_I;
+
     cpu->cycle = 8;
     cpu->target_cycle = 0;
 
@@ -722,12 +729,16 @@ OPCODE_LOADED:
                cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc, cpu->a,
                cpu->x, cpu->y);
 #endif
-        cpu->pc++;
         cpu->cycle = 1;
         cpu->target_cycle = 2;
         if(cpu->execute_int_next){
             cpu->execute_int = 1;
             cpu->execute_int_next = 0;
+#if MN_CPU_DEBUG
+            puts("INT");
+#endif
+        }else{
+            cpu->pc++;
         }
     }
 
@@ -735,9 +746,12 @@ OPCODE_LOADED:
         switch(cpu->cycle){
             case 1:
                 cpu->target_cycle = 7;
+                /* BRK is forced into the opcode register */
+                cpu->opcode = 0x00;
                 break;
             case 2:
-                cpu->pc++;
+                /* NOTE: PC increment is not performed on interrupt, only on
+                 * BRK */
                 break;
             case 3:
                 emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,

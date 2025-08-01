@@ -40,6 +40,10 @@
 
 #include <stdlib.h>
 
+#if MN_NROM_DEBUG_RW
+#include <stdio.h>
+#endif
+
 #define MN_NROM_RAM_SIZE 0x800
 #define MN_NROM_VRAM_SIZE (0x400*2+0x20)
 
