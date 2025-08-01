@@ -518,9 +518,7 @@ int mn_cpu_init(MNCPU *cpu) {
                     cpu->target_cycle++; \
                 }else{ \
                     cpu->opcode = tmp; \
-                    cpu->cycle = 0; /* It will be incremented to 1 after the
-                                     * switch */ \
-                    cpu->pc++; \
+                    goto OPCODE_LOADED; \
                 } \
                 break; \
             case 4: \
@@ -529,9 +527,7 @@ int mn_cpu_init(MNCPU *cpu) {
                     cpu->pc = cpu->tmp; \
                 }else{ \
                     cpu->opcode = tmp; \
-                    cpu->cycle = 0; /* It will be incremented to 1 after the
-                                     * switch */ \
-                    cpu->pc++; \
+                    goto OPCODE_LOADED; \
                 } \
                 break; \
         } \
@@ -713,6 +709,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
     }else if(cpu->cycle > cpu->target_cycle){
         cpu->opcode = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+OPCODE_LOADED:
 #if MN_CPU_DEBUG && !MN_CPU_CYCLE_DETAIL
         printf("%c%c%c%c%c-%c%c op: %02x pc: %04x a: %02x x: %02x "
                "y: %02x\n",
