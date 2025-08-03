@@ -58,6 +58,7 @@ typedef struct {
     size_t chr_rom_size;
     unsigned char bus;
 
+    unsigned int horizontal : 1;
     unsigned int chr_ram : 1;
 } MNNROM;
 
@@ -84,6 +85,7 @@ static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
     /* NOTE: We have already checked that rom contains at least 16 bytes when
      * searching the mapper. */
 
+    nrom->horizontal = rom[6]&1;
     if(rom[6]&(1<<2)){
         /* This ROM has a trainer */
         nrom->prg_rom_start += 512;
@@ -173,26 +175,35 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
 static unsigned char mn_nrom_vram_read(void *_emu, void *_mapper,
                                        unsigned short int addr) {
     MNNROM *rom = ((MNMapper*)_mapper)->data;
-    (void)_emu;
+    MNEmu *emu = _emu;
 
     if(addr < 0x2000){
         return rom->chr[addr];
-    }else if(addr < 0x3F20){
-        return rom->vram[addr-0x2000];
-    }else{
+    }else if(addr < 0x3000){
+        if(rom->horizontal){
+            return rom->vram[((addr-0x2000)&~0xC00)|((addr&0x800)>>1)];
+        }else{
+            return rom->vram[(addr-0x2000)&0x7FF];
+        }
+    }else if(addr >= 0x3F00){
         return rom->vram[0x800+(addr&0x1F)];
     }
+
+    return emu->ppu.io_bus;
 }
+
 static void mn_nrom_vram_write(void *_emu, void *_mapper,
                                unsigned short int addr, unsigned char value) {
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     (void)_emu;
 
-    if(addr < 0x2000){
-        rom->chr[addr] = value;
-    }else if(addr < 0x3F20){
-        rom->vram[addr-0x2000] = value;
-    }else{
+    if(addr >= 0x2000 && addr < 0x3000){
+        if(rom->horizontal){
+            rom->vram[((addr-0x2000)&~0xC00)|((addr&0x800)>>1)] = value;
+        }else{
+            rom->vram[(addr-0x2000)&0x7FF] = value;
+        }
+    }else if(addr >= 0x3F00){
         rom->vram[0x800+(addr&0x1F)] = value;
     }
 }
