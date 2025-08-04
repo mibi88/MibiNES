@@ -116,6 +116,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
+                printf("t: %04x %02x\n", ppu->addr, ppu->tile_id); \
                 break; \
             case 2: \
                 /* Address calculated as described at
@@ -128,6 +129,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             case 3: \
                 ppu->attr = (ppu->video_mem_bus = emu->mapper. \
                              vram_read(emu, &emu->mapper, ppu->addr)); \
+                printf("a: %04x %02x\n", ppu->addr, ppu->attr); \
                 break; \
             case 4: \
                 ppu->addr = (ppu->tile_id<<4)|(ppu->v>>12); \
@@ -137,6 +139,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->low_bp = (ppu->video_mem_bus = emu->mapper. \
                                vram_read(emu, &emu->mapper, \
                                          ppu->addr)); \
+                printf("l: %04x %02x\n", ppu->addr, ppu->low_bp); \
                 break; \
             case 6: \
                 ppu->addr = (ppu->tile_id<<4)|(1<<3)|(ppu->v>>12); \
@@ -146,6 +149,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
+                printf("h: %04x %02x\n", ppu->addr, ppu->high_bp); \
                 MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
@@ -260,10 +264,11 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             /* Set the VBlank flag and trigger NMI */
             if(!ppu->keep_vblank_clear) ppu->vblank = 1;
             ppu->keep_vblank_clear = 0;
-            cpu->nmi_pin = 0;
         }
         /* Vertical blanking lines */
     }
+
+    if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank) cpu->nmi_pin = 0;
 
     ppu->cycle++;
     if(ppu->cycle > 341){
@@ -295,7 +300,9 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         MN_PPU_BG_FETCH(ppu->cycle-1);
     }
 
-    /*printf("v: %08b%08b t: %08b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
+    if(ppu->cycle == 3) printf("v: %06b%08b %02b\n", (ppu->v>>8)&((1<<6)-1), ppu->v&0xFF, (ppu->v>>10)&3);
+
+    /*printf("v: %06b%08b t: %06b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
            ppu->t&0xFF);*/
 
     if(ppu->cycle == 0){
@@ -305,6 +312,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
 
+            /*printf("%08b%08b %08b%08b\n", ppu->low_shift>>8, ppu->low_shift&0xFF, ppu->high_shift>>8, ppu->high_shift&0xFF);*/
             MN_PPU_BG_SHIFT();
         }
         if(ppu->cycle == 256){
@@ -392,12 +400,10 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
                   unsigned char value) {
     ppu->io_bus = value;
 
-    printf("%u %02x\n", reg, value);
-
     switch(reg){
         case MN_PPU_CTRL:
             if(ppu->since_start < ppu->startup_time) break;
-            ppu->t &= (1<<10)|(1<<11);
+            ppu->t &= ~(3<<10);
             ppu->t |= (value&3)<<10;
             ppu->ctrl = value;
             break;
@@ -447,6 +453,7 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
 #if 0
             printf("%04x %02x\n", ppu->v&((1<<15)-1), value);
 #endif
+            printf("%04x = %02x\n", ppu->v&((1<<15)-1), value);
             emu->mapper.vram_write(emu, &emu->mapper, ppu->v&((1<<15)-1),
                                    value);
             if((ppu->scanline < 240 || ppu->scanline == 261) &&
