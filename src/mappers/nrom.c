@@ -85,7 +85,7 @@ static int mn_nrom_init(void *_emu, void *_mapper, unsigned char *rom,
     /* NOTE: We have already checked that rom contains at least 16 bytes when
      * searching the mapper. */
 
-    nrom->horizontal = rom[6]&1;
+    nrom->horizontal = !(rom[6]&1);
     if(rom[6]&(1<<2)){
         /* This ROM has a trainer */
         nrom->prg_rom_start += 512;
@@ -123,7 +123,7 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
     MNEmu *emu = _emu;
 
 #if MN_NROM_DEBUG_RW
-    printf("<- %02x\n", addr);
+    printf("<- %04x\n", addr);
 #endif
 
     if(addr >= 0x8000){
@@ -196,8 +196,6 @@ static void mn_nrom_vram_write(void *_emu, void *_mapper,
                                unsigned short int addr, unsigned char value) {
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     (void)_emu;
-
-    printf("%04x = %02x\n", addr, value);
 
     if(addr >= 0x2000 && addr < 0x3000){
         if(rom->horizontal){

@@ -68,7 +68,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     { \
         /* See https://www.nesdev.org/wiki/PPU_scrolling#Y_increment */ \
         if((ppu->v&(7<<12)) != (7<<12)){ \
-            ppu->v += 0x7000; \
+            ppu->v += (1<<12); \
         }else{ \
             ppu->v &= ~(7<<12); \
             if((ppu->v&(31<<5)) == (29<<5)){ \
@@ -101,8 +101,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
            (ppu->mask&MN_PPU_MASK_SPRITES)){
             /* Visible scanlines or pre-render scanline */
             if(ppu->cycle >= 1 && ppu->cycle <= 256){
-                if(!((ppu->cycle-1)&3) && ppu->cycle > 1){
+                if(!((ppu->cycle-1)&7) && ppu->cycle > 1){
                     /* Reload the shift registers */
+                    puts("reload");
 
                     /* The bitplanes go into the high 8-bit of two 16-bit shift
                      * registers. */
@@ -120,23 +121,23 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     MN_PPU_COARSE_X_INC();
                 }
 
+                printf("c: %03u s: %03u - l: %08b%08b h: %08b%08b a1: %08b a2: %08b l1: %01b l2: %01b\n",
+                       ppu->cycle, ppu->scanline, ppu->low_shift>>8, ppu->low_shift&0xFF,
+                       ppu->high_shift>>8, ppu->high_shift&0xFF, ppu->attr1_shift,
+                       ppu->attr2_shift, ppu->attr_latch1, ppu->attr_latch2);
+
                 if(ppu->scanline != 261){
                     /* Produce a background pixel */
                     color = ((ppu->low_shift>>ppu->x)&1)|(((ppu->high_shift>>
                              ppu->x)&1)<<1);
+                    if(!color) palette = 0;
                     palette = (ppu->attr1_shift&1)|((ppu->attr2_shift&1)<<1);
                     idx = emu->mapper.vram_read(emu, &emu->mapper,
                                                 0x3F00+palette*4+color);
 
-                    if(!color){
-                        bg_pixel = 0;
-                    }else{
-                        bg_pixel = 0;
-                    }
-
                     bg_pixel |= idx;
 
-#if 0
+#if MN_PPU_DEBUG_PIXEL
                     printf("%u %u %02x %02x %02x %02x\n", ppu->scanline,
                            ppu->cycle, color, palette, idx, bg_pixel);
 #endif
@@ -161,7 +162,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                 ppu->attr2_shift <<= 1;
                 ppu->attr2_shift |= ppu->attr_latch2;
 
-                switch((ppu->cycle-1)&3){
+                switch((ppu->cycle-1)&7){
                     case 0:
                         ppu->addr = 0x2000|(ppu->v&0x0FFF);
                         ppu->video_mem_bus = ppu->addr;
@@ -170,6 +171,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                         ppu->tile_id = (ppu->video_mem_bus = emu->mapper.
                                         vram_read(emu, &emu->mapper,
                                                   ppu->addr));
+#if MN_PPU_DEBUG_FETCH
+                        printf("t: %02x <- %04x\n", ppu->tile_id, ppu->addr);
+#endif
                         break;
                     case 2:
                         /* Address calculated as described at
@@ -182,29 +186,63 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     case 3:
                         ppu->attr = (ppu->video_mem_bus = emu->mapper.
                                      vram_read(emu, &emu->mapper, ppu->addr));
+#if MN_PPU_DEBUG_FETCH
+                        printf("a: %02x <- %04x\n", ppu->attr, ppu->addr);
+#endif
                         break;
                     case 4:
-                        ppu->addr = ppu->tile_id*16+(ppu->v>>12);
+                        ppu->addr = (ppu->tile_id<<4)|(ppu->v>>12);
                         ppu->video_mem_bus = ppu->addr;
                         break;
                     case 5:
                         ppu->low_bp = (ppu->video_mem_bus = emu->mapper.
                                        vram_read(emu, &emu->mapper,
                                                  ppu->addr));
+#if MN_PPU_DEBUG_FETCH
+                        printf("l: %02x <- %04x\n", ppu->low_bp, ppu->addr);
+#endif
                         break;
                     case 6:
-                        ppu->addr = ppu->tile_id*16+8+(ppu->v>>12);
+                        ppu->addr = (ppu->tile_id<<4)|(1<<3)|(ppu->v>>12);
                         ppu->video_mem_bus = ppu->addr;
                         break;
                     case 7:
                         ppu->high_bp = (ppu->video_mem_bus = emu->mapper.
                                         vram_read(emu, &emu->mapper,
                                                   ppu->addr));
+#if MN_PPU_DEBUG_FETCH
+                        printf("h: %02x <- %04x\n", ppu->high_bp, ppu->addr);
+#endif
                         break;
                 }
             }else if(ppu->cycle >= 321 && ppu->cycle <= 336){
+                /* Shift the shift registers */
+                ppu->low_shift <<= 1;
+                ppu->low_shift |= 1;
+                ppu->high_shift <<= 1;
+                ppu->high_shift |= 1;
+
+                ppu->attr1_shift <<= 1;
+                ppu->attr1_shift |= ppu->attr_latch1;
+
+                ppu->attr2_shift <<= 1;
+                ppu->attr2_shift |= ppu->attr_latch2;
+
                 if(ppu->cycle == 321+8){
                     /* XXX: Is this correct? */
+
+                    /* The bitplanes go into the high 8-bit of two 16-bit shift
+                     * registers. */
+                    ppu->low_shift &= 0xFF;
+                    ppu->high_shift &= 0xFF;
+                    ppu->low_shift |= ppu->low_bp<<8;
+                    ppu->high_shift |= ppu->high_bp<<8;
+
+                    ppu->attr_latch1 = ((ppu->attr>>(((ppu->v>>5)&1)<<2))+
+                                        (ppu->v&1))&1;
+                    ppu->attr_latch2 = (((ppu->attr>>(((ppu->v>>5)&1)<<2))+
+                                        (ppu->v&1))<<1)&1;
+
                     MN_PPU_COARSE_X_INC();
                 }
                 switch((ppu->cycle-321)&3){
@@ -276,24 +314,36 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     ppu->v |= cpu->t&((((1<<4)-1)<<11)|((1<<5)-1)<<5);
                 }
             }
+            if(ppu->cycle == 256){
+                /* Increment Y */
+                MN_PPU_Y_INC();
+            }
             if(ppu->cycle == 0){
                 /* Cycle 0 is an IDLE cycle */
             }else if(ppu->cycle <= 256){
-                if(ppu->cycle == 256){
-                    /* Increment Y */
-                    MN_PPU_Y_INC();
-                }
+                /**/
             }else if(ppu->cycle == 257){
                 ppu->v &= ~(((1<<5)-1)|(1<<10));
                 ppu->v |= ppu->t&(((1<<5)-1)|(1<<10));
+            }
+
+            if(ppu->cycle == 328 || ppu->cycle == 336){
+                MN_PPU_COARSE_X_INC();
             }
         }else{
             if(ppu->cycle >= 1 && ppu->cycle <= 256){
                 if(ppu->scanline != 261){
                     /* Produce a background pixel */
-                    bg_pixel = (ppu->video_mem_bus = emu->mapper.
-                                        vram_read(emu, &emu->mapper,
-                                                  ppu->v));
+                    /* TODO: Make something correct */
+                    if(ppu->v >= 0x3F00){
+                        bg_pixel = (ppu->video_mem_bus = emu->mapper.
+                                            vram_read(emu, &emu->mapper,
+                                                      ppu->v));
+                    }else{
+                        bg_pixel = ppu->video_mem_bus = emu->mapper.
+                                            vram_read(emu, &emu->mapper,
+                                                      0x3F00);
+                    }
 
                     bg_pixel &= 0x3F;
 
@@ -430,18 +480,12 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
             if(ppu->w){
                 /* 2nd write */
                 ppu->t &= ~0xFF;
-                printf("t4: %04x\n", ppu->t);
                 ppu->t |= value;
-                printf("t5: %04x\n", ppu->t);
                 ppu->v = ppu->t;
-                printf("v: %04x\n", ppu->v);
                 ppu->w = 0;
             }else{
-                printf("t1: %04x\n", ppu->t);
                 ppu->t &= 0xFF;
-                printf("t2: %04x\n", ppu->t);
                 ppu->t |= (value&((1<<6)-1))<<8;
-                printf("t3: %04x\n", ppu->t);
                 ppu->w = 1;
             }
             break;
