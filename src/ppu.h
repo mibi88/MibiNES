@@ -58,8 +58,12 @@ enum {
 
 enum {
     /* TODO: Add masks for all other flags */
+    MN_PPU_MASK_GRAYSCALE = 1,
     MN_PPU_MASK_BACKGROUND = 1<<3,
-    MN_PPU_MASK_SPRITES = 1<<4
+    MN_PPU_MASK_SPRITES = 1<<4,
+    MN_PPU_MASK_RENDER = 3<<3, /* The ppu renders if both the 3rd and the 4th
+                                * bit are on. If both are off a backdrop color
+                                * is shown. */
 };
 
 int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
