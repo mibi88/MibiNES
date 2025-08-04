@@ -226,7 +226,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     ppu->vblank = 0;
                     ppu->sprite0_hit = 0;
                     ppu->sprite_overflow = 0;
-                    cpu->nmi_pin = 0;
+                    cpu->nmi_pin = 1;
                 }
 
                 if(ppu->cycle >= 280 && ppu->cycle <= 304){
@@ -260,7 +260,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             /* Set the VBlank flag and trigger NMI */
             if(!ppu->keep_vblank_clear) ppu->vblank = 1;
             ppu->keep_vblank_clear = 0;
-            cpu->nmi_pin = 1;
+            cpu->nmi_pin = 0;
         }
         /* Vertical blanking lines */
     }
@@ -286,7 +286,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 }
 
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
-    unsigned char pixel;
+    unsigned char pixel = 0;
 
     /* Memory fetches */
     if(ppu->cycle >= 321 && ppu->cycle <= 336){
@@ -295,6 +295,9 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         MN_PPU_BG_FETCH(ppu->cycle-1);
     }
 
+    /*printf("v: %08b%08b t: %08b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
+           ppu->t&0xFF);*/
+
     if(ppu->cycle == 0){
         /* Cycle 0 is an IDLE cycle */
     }else if(ppu->cycle >= 1 && ppu->cycle <= 256){
@@ -302,12 +305,13 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
 
-            return pixel;
+            MN_PPU_BG_SHIFT();
         }
-    }else if(ppu->cycle == 256){
-        /* Increment Y */
+        if(ppu->cycle == 256){
+            /* Increment Y */
 
-        MN_PPU_BG_Y_INC();
+            MN_PPU_BG_Y_INC();
+        }
     }else if(ppu->cycle == 257){
         /* Copy some bits of t to v */
 
@@ -326,7 +330,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 break;
         }
     }
-    return 0;
+    return pixel;
 }
 
 unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
@@ -387,6 +391,8 @@ unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
 void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
                   unsigned char value) {
     ppu->io_bus = value;
+
+    printf("%u %02x\n", reg, value);
 
     switch(reg){
         case MN_PPU_CTRL:
