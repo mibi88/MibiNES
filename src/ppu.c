@@ -103,7 +103,6 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             if(ppu->cycle >= 1 && ppu->cycle <= 256){
                 if(!((ppu->cycle-1)&7) && ppu->cycle > 1){
                     /* Reload the shift registers */
-                    puts("reload");
 
                     /* The bitplanes go into the high 8-bit of two 16-bit shift
                      * registers. */
@@ -112,6 +111,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     ppu->low_shift |= ppu->low_bp<<8;
                     ppu->high_shift |= ppu->high_bp<<8;
 
+                    /* TODO: Fix these calculations */
                     ppu->attr_latch1 = ((ppu->attr>>(((ppu->v>>5)&1)<<2))+
                                         (ppu->v&1))&1;
                     ppu->attr_latch2 = (((ppu->attr>>(((ppu->v>>5)&1)<<2))+
@@ -121,10 +121,12 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     MN_PPU_COARSE_X_INC();
                 }
 
+#if 0
                 printf("c: %03u s: %03u - l: %08b%08b h: %08b%08b a1: %08b a2: %08b l1: %01b l2: %01b\n",
                        ppu->cycle, ppu->scanline, ppu->low_shift>>8, ppu->low_shift&0xFF,
                        ppu->high_shift>>8, ppu->high_shift&0xFF, ppu->attr1_shift,
                        ppu->attr2_shift, ppu->attr_latch1, ppu->attr_latch2);
+#endif
 
                 if(ppu->scanline != 261){
                     /* Produce a background pixel */
@@ -135,7 +137,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     idx = emu->mapper.vram_read(emu, &emu->mapper,
                                                 0x3F00+palette*4+color);
 
-                    bg_pixel |= idx;
+                    bg_pixel = idx;
 
 #if MN_PPU_DEBUG_PIXEL
                     printf("%u %u %02x %02x %02x %02x\n", ppu->scanline,
@@ -151,10 +153,10 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                 }
 
                 /* Shift the shift registers */
-                ppu->low_shift <<= 1;
-                ppu->low_shift |= 1;
-                ppu->high_shift <<= 1;
-                ppu->high_shift |= 1;
+                ppu->low_shift >>= 1;
+                ppu->low_shift |= 1<<15;
+                ppu->high_shift >>= 1;
+                ppu->high_shift |= 1<<15;
 
                 ppu->attr1_shift <<= 1;
                 ppu->attr1_shift |= ppu->attr_latch1;
@@ -217,10 +219,10 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                 }
             }else if(ppu->cycle >= 321 && ppu->cycle <= 336){
                 /* Shift the shift registers */
-                ppu->low_shift <<= 1;
-                ppu->low_shift |= 1;
-                ppu->high_shift <<= 1;
-                ppu->high_shift |= 1;
+                ppu->low_shift >>= 1;
+                ppu->low_shift |= 1<<15;
+                ppu->high_shift >>= 1;
+                ppu->high_shift |= 1<<15;
 
                 ppu->attr1_shift <<= 1;
                 ppu->attr1_shift |= ppu->attr_latch1;
