@@ -197,6 +197,8 @@ static void mn_nrom_vram_write(void *_emu, void *_mapper,
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     (void)_emu;
 
+    printf("%04x = %02x\n", addr, value);
+
     if(addr >= 0x2000 && addr < 0x3000){
         if(rom->horizontal){
             rom->vram[((addr-0x2000)&~0xC00)|((addr&0x800)>>1)] = value;

@@ -195,7 +195,7 @@ static void mn_gui_update(void) {
 
     last_time = new_time;
 
-    printf("\033[2Kms: %lu\r", ms);
+    /*printf("\033[2Kms: %lu\r", ms);*/
     fflush(stdout);
 
     XFlush(display);

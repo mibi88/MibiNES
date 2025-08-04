@@ -82,7 +82,7 @@ void mn_emu_pixel(MNEmu *emu) {
 
 void mn_emu_frame(MNEmu *emu) {
     size_t i;
-    for(i=0;i<262*341;i++){
+    for(i=0;i<262*342;i++){
         mn_emu_step(emu);
     }
 }

@@ -53,6 +53,12 @@ enum {
     MN_PPU_CTRL_INC = 1<<2
 };
 
+enum {
+    /* TODO: Add masks for all other flags */
+    MN_PPU_MASK_BACKGROUND = 1<<3,
+    MN_PPU_MASK_SPRITES = 1<<4
+};
+
 int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 void draw_pixel(long int color));
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu);
