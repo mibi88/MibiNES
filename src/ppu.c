@@ -64,6 +64,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         if(x&(1<<6)) ppu->v ^= 0x400; \
     }
 
+#if 0
 #define MN_PPU_BG_Y_INC() \
     { \
         /* See https://www.nesdev.org/wiki/PPU_scrolling#Y_increment */ \
@@ -81,6 +82,31 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             } \
         } \
     }
+#else
+
+#define MN_PPU_BG_Y_INC() \
+    { \
+        /* See https://www.nesdev.org/wiki/PPU_scrolling#Y_increment
+         * This is the exact same algorithm that's on the NesDev wiki, to debug
+         * my code above. */ \
+        register unsigned char y; \
+        if((ppu->v&0x7000) != 0x7000){ \
+            ppu->v += 0x1000; \
+        }else{ \
+            ppu->v &= ~0x7000; \
+            y = (ppu->v&0x03E0)>>5; \
+            if(y == 29){ \
+                y = 0; \
+                ppu->v ^= 0x0800; \
+            }else if(y == 31){ \
+                y = 0; \
+            }else{ \
+                y += 1; \
+            } \
+            ppu->v = (ppu->v&~0x03E0)|(y<<5); \
+        } \
+    }
+#endif
 
 #define MN_PPU_BG_FILL_SHIFT_REGS() \
     { \
@@ -116,7 +142,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
-                printf("t: %04x %02x\n", ppu->addr, ppu->tile_id); \
                 break; \
             case 2: \
                 /* Address calculated as described at
@@ -129,7 +154,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             case 3: \
                 ppu->attr = (ppu->video_mem_bus = emu->mapper. \
                              vram_read(emu, &emu->mapper, ppu->addr)); \
-                printf("a: %04x %02x\n", ppu->addr, ppu->attr); \
                 break; \
             case 4: \
                 ppu->addr = (ppu->tile_id<<4)|(ppu->v>>12); \
@@ -139,7 +163,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->low_bp = (ppu->video_mem_bus = emu->mapper. \
                                vram_read(emu, &emu->mapper, \
                                          ppu->addr)); \
-                printf("l: %04x %02x\n", ppu->addr, ppu->low_bp); \
                 break; \
             case 6: \
                 ppu->addr = (ppu->tile_id<<4)|(1<<3)|(ppu->v>>12); \
@@ -149,7 +172,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
-                printf("h: %04x %02x\n", ppu->addr, ppu->high_bp); \
                 MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
@@ -200,6 +222,19 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                         ppu->palette[0x40*(ppu->mask>>5)+idx*3+2]); \
     }
 
+#define MN_PPU_INC_CYCLE() \
+    { \
+        ppu->cycle++; \
+        if(ppu->cycle > 341){ \
+            ppu->cycle = 0; \
+            ppu->scanline++; \
+            if(ppu->scanline > 261){ \
+                ppu->scanline = 0; \
+                ppu->even_frame = !ppu->even_frame; \
+            } \
+        } \
+    }
+
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu);
 unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu);
 
@@ -216,11 +251,28 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     unsigned char sprite_pixel;
     unsigned char idx;
 
+    if(ppu->scanline == 261 && ppu->cycle == 340 && !ppu->even_frame &&
+       (ppu->mask&MN_PPU_MASK_RENDER)){
+        /* Skip the last cycle of the pre-render scanline on an odd frames */
+        MN_PPU_INC_CYCLE();
+    }
+
     if(ppu->scanline <= 239 || ppu->scanline == 261){
+        if(ppu->cycle == 1) printf("l: %08b%08b h: %08b%08b v: %07b%08b\n", ppu->low_shift>>8, ppu->low_shift&0xFF, ppu->high_shift>>8, ppu->high_shift&0xFF, (ppu->v>>8)&0x7F, ppu->v&0xFF);
         if(ppu->mask&MN_PPU_MASK_RENDER){
+            /*printf("sv: %07b%08b %u %u\n", (ppu->t>>8)&((1<<8)-1),
+                     ppu->t&0xFF, ppu->cycle, ppu->scanline);*/
+
             /* Visible scanlines or pre-render scanline */
 
             bg_pixel = mn_ppu_bg(ppu, emu);
+
+            if(ppu->cycle == 257){
+                /* Copy some bits of t to v */
+
+                ppu->v &= ~(((1<<5)-1)|(1<<10));
+                ppu->v |= ppu->t&(((1<<5)-1)|(1<<10));
+            }
 
             if(ppu->scanline == 261){
                 /* Pre-render scanline only code */
@@ -270,12 +322,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 
     if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank) cpu->nmi_pin = 0;
 
-    ppu->cycle++;
-    if(ppu->cycle > 341){
-        ppu->cycle = 0;
-        ppu->scanline++;
-        if(ppu->scanline > 261) ppu->scanline = 0;
-    }
+    MN_PPU_INC_CYCLE();
 
     if(ppu->since_start < ppu->startup_time){
         ppu->since_start++;
@@ -300,8 +347,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         MN_PPU_BG_FETCH(ppu->cycle-1);
     }
 
-    if(ppu->cycle == 3) printf("v: %06b%08b %02b\n", (ppu->v>>8)&((1<<6)-1), ppu->v&0xFF, (ppu->v>>10)&3);
-
     /*printf("v: %06b%08b t: %06b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
            ppu->t&0xFF);*/
 
@@ -312,7 +357,9 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
 
-            /*printf("%08b%08b %08b%08b\n", ppu->low_shift>>8, ppu->low_shift&0xFF, ppu->high_shift>>8, ppu->high_shift&0xFF);*/
+            /*printf("%08b%08b %08b%08b\n", ppu->low_shift>>8,
+                     ppu->low_shift&0xFF, ppu->high_shift>>8,
+                     ppu->high_shift&0xFF);*/
             MN_PPU_BG_SHIFT();
         }
         if(ppu->cycle == 256){
@@ -320,11 +367,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
 
             MN_PPU_BG_Y_INC();
         }
-    }else if(ppu->cycle == 257){
-        /* Copy some bits of t to v */
-
-        ppu->v &= ~(((1<<5)-1)|(1<<10));
-        ppu->v |= ppu->t&(((1<<5)-1)|(1<<10));
     }else if(ppu->cycle >= 337){
         switch((ppu->cycle-321)&3){
             case 0:
@@ -451,9 +493,8 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
             break;
         case MN_PPU_PPUDATA:
 #if 0
-            printf("%04x %02x\n", ppu->v&((1<<15)-1), value);
-#endif
             printf("%04x = %02x\n", ppu->v&((1<<15)-1), value);
+#endif
             emu->mapper.vram_write(emu, &emu->mapper, ppu->v&((1<<15)-1),
                                    value);
             if((ppu->scanline < 240 || ppu->scanline == 261) &&
