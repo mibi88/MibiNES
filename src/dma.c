@@ -32,83 +32,60 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <emu.h>
-
-#include <cpu.h>
-#include <ppu.h>
-#include <apu.h>
 #include <dma.h>
 
-int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
-                unsigned char *rom, unsigned char *palette, size_t size,
-                int pal) {
-    emu->pal = pal;
+/* TODO: Add support for DMC DMA */
 
-    if(mn_cpu_init(&emu->cpu)){
-        return MN_EMU_E_CPU;
+int mn_dma_init(MNDMA *dma) {
+    /* TODO: Pick a random cycle */
+    dma->cycle = 0;
+
+    dma->value = 0;
+    dma->step = 0;
+
+    dma->do_oam_dma = 0;
+    dma->do_dmc_dma = 0;
+
+    dma->aligned = 1;
+
+    return 0;
+}
+
+void mn_dma_cycle(MNDMA *dma, MNEmu *emu) {
+    if(dma->do_oam_dma){
+        emu->cpu.rdy = 0;
+        if(emu->cpu.halted && ((!dma->cycle && !dma->aligned) ||
+                               dma->aligned)){
+            switch(dma->cycle){
+                case 0:
+                    /* get cycle */
+                    dma->value = emu->mapper.read(emu, &emu->mapper,
+                                                  dma->page<<8|dma->step);
+                    break;
+                case 1:
+                    /* put cycle */
+                    emu->mapper.write(emu, &emu->mapper, 0x2004,
+                                      dma->value);
+
+                    /* Stop DMA once we copied 256 bytes */
+                    dma->step++;
+                    if(!dma->step){
+                        dma->do_oam_dma = 0;
+                        emu->cpu.rdy = 1;
+                    }
+                    break;
+            }
+            dma->aligned = 1;
+        }
+    }else{
+        dma->aligned = 0;
+        dma->step = 0;
     }
-    emu->cpu.irq_pin = 1; /* /IRQ is kept high */
-    emu->cpu.nmi_pin = 1;
-    if(mn_dma_init(&emu->dma)){
-        return MN_EMU_E_DMA;
-    }
-    if(mn_ppu_init(&emu->ppu, palette, draw_pixel)){
-        return MN_EMU_E_PPU;
-    }
-    if(mn_apu_init(&emu->apu)){
-        return MN_EMU_E_APU;
-    }
 
-    if(mn_mapper_find(&emu->mapper, rom, size)){
-        return MN_EMU_E_MAPPER;
-    }
-
-    if(emu->mapper.init(emu, &emu->mapper, rom, size)){
-        return MN_EMU_E_MAPPER;
-    }
-
-    return MN_EMU_E_NONE;
+    dma->cycle = !dma->cycle;
 }
 
-void mn_emu_step(MNEmu *emu) {
-    mn_ppu_cycle(&emu->ppu, emu);
-}
-
-void mn_emu_cycle(MNEmu *emu) {
-    /* TODO: Perform the right number of steps */
-    (void)emu;
-}
-
-void mn_emu_pixel(MNEmu *emu) {
-    /* TODO: Perform the right number of steps */
-    (void)emu;
-}
-
-void mn_emu_frame(MNEmu *emu) {
-    size_t i;
-    for(i=0;i<262*342;i++){
-        mn_emu_step(emu);
-    }
-}
-
-void mn_emu_step_into(MNEmu *emu) {
-    /* TODO: Perform the right number of steps */
-    (void)emu;
-}
-
-void mn_emu_step_over(MNEmu *emu) {
-    /* TODO: Perform the right number of steps */
-    (void)emu;
-}
-
-void mn_emu_step_out(MNEmu *emu) {
-    /* TODO: Perform the right number of steps */
-    (void)emu;
-}
-
-void mn_emu_free(MNEmu *emu) {
-    emu->mapper.free(emu, &emu->mapper);
-    mn_cpu_free(&emu->cpu);
-    mn_ppu_free(&emu->ppu);
-    mn_apu_free(&emu->apu);
+void mn_dma_free(MNDMA *dma) {
+    /* There is nothing to do here */
+    (void)dma;
 }

@@ -32,47 +32,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MN_PPU_H
-#define MN_PPU_H
+#ifndef MN_DMA_H
+#define MN_DMA_H
 
 #include <emu.h>
 
-#define MN_PPU_DEBUG_FETCH 0
-#define MN_PPU_DEBUG_PIXEL 0
+int mn_dma_init(MNDMA *dma);
 
-enum {
-    MN_PPU_CTRL,
-    MN_PPU_MASK,
-    MN_PPU_STATUS,
-    MN_PPU_OAMADDR,
-    MN_PPU_OAMDATA,
-    MN_PPU_PPUSCROLL,
-    MN_PPU_PPUADDR,
-    MN_PPU_PPUDATA
-};
+void mn_dma_cycle(MNDMA *dma, MNEmu *emu);
 
-enum {
-    /* TODO: Add masks for all other flags */
-    MN_PPU_CTRL_INC = 1<<2,
-    MN_PPU_CTRL_NMI = 1<<7
-};
+void mn_dma_free(MNDMA *dma);
 
-enum {
-    /* TODO: Add masks for all other flags */
-    MN_PPU_MASK_GRAYSCALE = 1,
-    MN_PPU_MASK_BACKGROUND = 1<<3,
-    MN_PPU_MASK_SPRITES = 1<<4,
-    MN_PPU_MASK_RENDER = 3<<3  /* The ppu renders if both the 3rd and the 4th
-                                * bit are on. If both are off a backdrop color
-                                * is shown. */
-};
-
-int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
-                void draw_pixel(long int color));
-void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu);
-unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg);
-void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
-                  unsigned char value);
-void mn_ppu_free(MNPPU *ppu);
-
-#endif /* MN_PPU_H */
+#endif

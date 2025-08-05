@@ -42,6 +42,7 @@
 int mn_cpu_init(MNCPU *cpu) {
     cpu->pc = 0;
     cpu->jammed = 0;
+    cpu->halted = 0;
 
     /* TODO: Properly emulate the power on and reset sequences. */
     cpu->s = 0xFD;
@@ -52,6 +53,8 @@ int mn_cpu_init(MNCPU *cpu) {
 
     cpu->cycle = 8;
     cpu->target_cycle = 0;
+
+    cpu->rdy = 1;
 
     cpu->irq_pin = 0;
     cpu->nmi_pin = 0;
@@ -77,6 +80,18 @@ int mn_cpu_init(MNCPU *cpu) {
 #undef MN_CPU_REPORT_POLLING
 #define MN_CPU_REPORT_POLLING
 #endif
+
+static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
+    register MNCPU *cpu = &emu->cpu;
+
+    /* Halt the CPU on a read if RDY is low */
+    if(!cpu->rdy) cpu->halted = 1;
+    return cpu->last_read = emu->mapper.read(emu, &emu->mapper, addr);
+}
+
+#define MN_CPU_READ(addr) mn_cpu_read(emu, addr)
+#define MN_CPU_WRITE(addr, value) emu->mapper.write(emu, &emu->mapper, addr, \
+                                                    value)
 
 #define MN_CPU_INTPOLL() \
     { \
@@ -215,12 +230,12 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                tmp = MN_CPU_READ(cpu->pc); \
                 cpu->tmp = cpu->t|(tmp<<8); \
                 cpu->pc++; \
                 break; \
             case 4: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
  \
                 op; \
  \
@@ -238,21 +253,21 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                tmp = MN_CPU_READ(cpu->pc); \
                 cpu->tmp = cpu->t|(tmp<<8); \
                 cpu->pc++; \
                 break; \
             case 4: \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->t = MN_CPU_READ(cpu->tmp); \
                 break; \
             case 5: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
  \
                 /* Perform the operation on it */ \
                 op; \
                 break; \
             case 6: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -267,13 +282,13 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                tmp = MN_CPU_READ(cpu->pc); \
                 cpu->tmp = cpu->t|(tmp<<8); \
                 cpu->pc++; \
                 break; \
             case 4: \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                MN_CPU_WRITE(cpu->tmp, tmp); \
                 break; \
         } \
     }
@@ -288,7 +303,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                tmp = MN_CPU_READ(cpu->t); \
                 op; \
                 break; \
         } \
@@ -305,14 +320,14 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->tmp = cpu->t; \
                 break; \
             case 3: \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->t = MN_CPU_READ(cpu->tmp); \
                 break; \
             case 4: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 op; \
                 break; \
             case 5: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -328,7 +343,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 break; \
             case 3: \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->t, tmp); \
+                MN_CPU_WRITE(cpu->t, tmp); \
                 break; \
         } \
     }
@@ -343,11 +358,11 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                MN_CPU_READ(cpu->t); \
                 cpu->t += i; \
                 break; \
             case 4: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                tmp = MN_CPU_READ(cpu->t); \
                 op; \
                 break; \
         } \
@@ -363,19 +378,19 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                MN_CPU_READ(cpu->t); \
                 cpu->t += cpu->x; \
                 break; \
             case 4: \
                 cpu->tmp = cpu->t; \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->t = MN_CPU_READ(cpu->tmp); \
                 break; \
             case 5: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 op; \
                 break; \
             case 6: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -390,12 +405,12 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                MN_CPU_READ(cpu->t); \
                 cpu->t += i; \
                 break; \
             case 4: \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->t, tmp); \
+                MN_CPU_WRITE(cpu->t, tmp); \
                 break; \
         } \
     }
@@ -411,7 +426,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 break; \
             case 3: \
                 cpu->tmp = cpu->t; \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->t = MN_CPU_READ(cpu->pc); \
                 cpu->tmp += i; \
                 tmp = cpu->tmp>>8; \
                 cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
@@ -419,7 +434,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 4: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
                 if(cpu->t){ \
                     cpu->tmp += cpu->t<<8; \
                     cpu->target_cycle++; \
@@ -429,7 +444,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 break; \
             case 5: \
                 /* Only executed if a page boundary had been crossed */ \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
                 op; \
                 break; \
         } \
@@ -446,7 +461,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 break; \
             case 3: \
                 cpu->tmp = cpu->t; \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->t = MN_CPU_READ(cpu->pc); \
                 cpu->tmp += cpu->x; \
                 tmp = cpu->tmp>>8; \
                 cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
@@ -454,18 +469,18 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 4: \
-                emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                MN_CPU_READ(cpu->tmp); \
                 cpu->tmp += cpu->t<<8; \
                 break; \
             case 5: \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->t = MN_CPU_READ(cpu->tmp); \
                 break; \
             case 6: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 op; \
                 break; \
             case 7: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -481,7 +496,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 break; \
             case 3: \
                 cpu->tmp = cpu->t; \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                cpu->t = MN_CPU_READ(cpu->pc); \
                 cpu->tmp += i; \
                 tmp = cpu->tmp>>8; \
                 cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
@@ -489,12 +504,12 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 4: \
-                emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                MN_CPU_READ(cpu->tmp); \
                 cpu->tmp += cpu->t<<8; \
                 break; \
             case 5: \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                MN_CPU_WRITE(cpu->tmp, tmp); \
                 break; \
         } \
     }
@@ -510,7 +525,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                tmp = MN_CPU_READ(cpu->pc); \
                 if(branch){ \
                     if(cpu->t&(1<<7)){ \
                         cpu->tmp = cpu->pc-(256-cpu->t); \
@@ -528,7 +543,7 @@ int mn_cpu_init(MNCPU *cpu) {
                 } \
                 break; \
             case 4: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc); \
+                tmp = MN_CPU_READ(cpu->pc); \
                 if(cpu->pc != cpu->tmp) { \
                     cpu->pc = cpu->tmp; \
                 }else{ \
@@ -549,18 +564,17 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                MN_CPU_READ(cpu->t); \
                 cpu->t += cpu->x; \
                 break; \
             case 4: \
-                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
                 break; \
             case 5: \
-                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
-                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
                 break; \
             case 6: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
                 op; \
                 break; \
         } \
@@ -576,25 +590,24 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                MN_CPU_READ(cpu->t); \
                 cpu->t += cpu->x; \
                 break; \
             case 4: \
-                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
                 break; \
             case 5: \
-                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
-                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
                 break; \
             case 6: \
-                cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                cpu->t = MN_CPU_READ(cpu->tmp); \
                 break; \
             case 7: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 op; \
                 break; \
             case 8: \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -609,19 +622,18 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                MN_CPU_READ(cpu->t); \
                 cpu->t += cpu->x; \
                 break; \
             case 4: \
-                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
                 break; \
             case 5: \
-                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
-                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
                 break; \
             case 6: \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -636,16 +648,15 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
                 break; \
             case 4: \
-                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
-                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
                 cpu->tmp2 = cpu->tmp+cpu->y; \
                 cpu->tmp = (cpu->tmp2&0xFF)|(cpu->tmp&0xFF00); \
                 break; \
             case 5: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
                 if(cpu->tmp != cpu->tmp2){ \
                     cpu->tmp = cpu->tmp2; \
                     cpu->target_cycle++; \
@@ -656,7 +667,7 @@ int mn_cpu_init(MNCPU *cpu) {
             case 6: \
                 /* This cycle is only executed if the effective address was
                  * fixed. */ \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
                 op; \
                 break; \
         } \
@@ -672,23 +683,22 @@ int mn_cpu_init(MNCPU *cpu) {
                 cpu->pc++; \
                 break; \
             case 3: \
-                cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->t); \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
                 break; \
             case 4: \
-                cpu->tmp |= emu->mapper.read(emu, &emu->mapper, \
-                                             (cpu->t+1)&0xFF)<<8; \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
                 cpu->tmp2 = cpu->tmp+cpu->y; \
                 cpu->tmp = (cpu->tmp2&0xFF)|(cpu->tmp&0xFF00); \
                 break; \
             case 5: \
-                tmp = emu->mapper.read(emu, &emu->mapper, cpu->tmp); \
+                tmp = MN_CPU_READ(cpu->tmp); \
                 cpu->tmp = cpu->tmp2; \
                 break; \
             case 6: \
                 /* This cycle is only executed if the effective address was
                  * fixed. */ \
                 op; \
-                emu->mapper.write(emu, &emu->mapper, cpu->tmp, tmp); \
+                MN_CPU_WRITE(cpu->tmp, tmp); \
                 break; \
         } \
     }
@@ -706,15 +716,22 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     unsigned short int result;
 
     if(cpu->jammed) return;
+    if(cpu->halted){
+        MN_CPU_READ(cpu->last_read);
+
+        /* XXX: Is this accurate? */
+        if(cpu->rdy) cpu->halted = 0;
+        return;
+    }
 
     /* The internal signals are raised during phi 1 of each cycle */
     if(cpu->nmi_detected) cpu->should_nmi = 1;
     if(cpu->irq_detected) cpu->should_irq = 1;
 
     if(cpu->cycle == 2){
-        cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+        cpu->t = MN_CPU_READ(cpu->pc);
     }else if(cpu->cycle > cpu->target_cycle){
-        cpu->opcode = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+        cpu->opcode = MN_CPU_READ(cpu->pc);
 OPCODE_LOADED:
 #if MN_CPU_DEBUG && !MN_CPU_CYCLE_DETAIL
         printf("%c%c%c%c%c-%c%c op: %02x pc: %04x a: %02x x: %02x "
@@ -753,13 +770,11 @@ OPCODE_LOADED:
                  * BRK */
                 break;
             case 3:
-                emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                  cpu->pc>>8);
+                MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
                 cpu->s--;
                 break;
             case 4:
-                emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                  cpu->pc);
+                MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
                 cpu->s--;
                 cpu->is_irq = 1;
                 if(cpu->should_nmi){
@@ -768,20 +783,16 @@ OPCODE_LOADED:
                 }
                 break;
             case 5:
-                emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                  cpu->p);
+                MN_CPU_WRITE(0x0100+cpu->s, cpu->p);
                 cpu->s--;
                 break;
             case 6:
                 cpu->pc &= 0xFF00;
-                cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                            cpu->is_irq ? 0xFFFE : 0xFFFA);
+                cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFE : 0xFFFA);
                 break;
             case 7:
                 cpu->pc &= 0xFF;
-                cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                            cpu->is_irq ?
-                                            0xFFFF : 0xFFFB)<<8;
+                cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFF : 0xFFFB)<<8;
                 if(!cpu->is_irq) cpu->should_nmi = 0;
                 cpu->execute_int = 0;
                 break;
@@ -803,14 +814,12 @@ OPCODE_LOADED:
                     cpu->pc++;
                     break;
                 case 3:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->pc>>8);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
                     cpu->s--;
                     cpu->p |= MN_CPU_B;
                     break;
                 case 4:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->pc);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
                     cpu->s--;
                     cpu->is_irq = 1;
                     if(cpu->should_nmi){
@@ -819,20 +828,16 @@ OPCODE_LOADED:
                     }
                     break;
                 case 5:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->p);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->p);
                     cpu->s--;
                     break;
                 case 6:
                     cpu->pc &= 0xFF00;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                                cpu->is_irq ? 0xFFFE : 0xFFFA);
+                    cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFE : 0xFFFA);
                     break;
                 case 7:
                     cpu->pc &= 0xFF;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                                cpu->is_irq ?
-                                                0xFFFF : 0xFFFB)<<8;
+                    cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFF : 0xFFFB)<<8;
                     if(!cpu->is_irq) cpu->should_nmi = 0;
                     break;
             }
@@ -848,20 +853,17 @@ OPCODE_LOADED:
                     cpu->s++;
                     break;
                 case 4:
-                    cpu->p = emu->mapper.read(emu, &emu->mapper,
-                                              0x0100+cpu->s);
+                    cpu->p = MN_CPU_READ(0x0100+cpu->s);
                     cpu->s++;
                     break;
                 case 5:
                     cpu->pc &= 0xFF00;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                                0x0100+cpu->s);
+                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s);
                     cpu->s++;
                     break;
                 case 6:
                     cpu->pc &= 0xFF;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                                0x0100+cpu->s)<<8;
+                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s)<<8;
                     break;
             }
             break;
@@ -877,14 +879,12 @@ OPCODE_LOADED:
                     break;
                 case 4:
                     cpu->pc &= 0xFF00;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                                0x0100+cpu->s);
+                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s);
                     cpu->s++;
                     break;
                 case 5:
                     cpu->pc &= 0xFF;
-                    cpu->pc |= emu->mapper.read(emu, &emu->mapper,
-                                                0x0100+cpu->s)<<8;
+                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s)<<8;
                     break;
                 case 6:
                     cpu->pc++;
@@ -898,8 +898,7 @@ OPCODE_LOADED:
                     cpu->target_cycle = 3;
                     break;
                 case 3:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->a);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->a);
                     cpu->s--;
                     break;
             }
@@ -912,8 +911,7 @@ OPCODE_LOADED:
                     cpu->target_cycle = 3;
                     break;
                 case 3:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->p);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->p);
                     cpu->s--;
                     break;
             }
@@ -929,8 +927,7 @@ OPCODE_LOADED:
                     cpu->s++;
                     break;
                 case 4:
-                    cpu->a = emu->mapper.read(emu, &emu->mapper,
-                                              0x0100+cpu->s);
+                    cpu->a = MN_CPU_READ(0x0100+cpu->s);
                     break;
             }
             break;
@@ -945,8 +942,7 @@ OPCODE_LOADED:
                     cpu->s++;
                     break;
                 case 4:
-                    cpu->p = emu->mapper.read(emu, &emu->mapper,
-                                              0x0100+cpu->s);
+                    cpu->p = MN_CPU_READ(0x0100+cpu->s);
                     break;
             }
             break;
@@ -961,18 +957,15 @@ OPCODE_LOADED:
                     cpu->pc++;
                     break;
                 case 4:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->pc>>8);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
                     cpu->s--;
                     break;
                 case 5:
-                    emu->mapper.write(emu, &emu->mapper, 0x0100+cpu->s,
-                                      cpu->pc);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
                     cpu->s--;
                     break;
                 case 6:
-                    cpu->pc = cpu->t|(emu->mapper.read(emu, &emu->mapper,
-                                                       cpu->pc)<<8);
+                    cpu->pc = cpu->t|(MN_CPU_READ(cpu->pc)<<8);
                     break;
             }
             break;
@@ -1260,7 +1253,7 @@ OPCODE_LOADED:
                     cpu->pc++;
                     break;
                 case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    tmp = MN_CPU_READ(cpu->pc);
                     cpu->pc = cpu->t|(tmp<<8);
                     break;
             }
@@ -2109,17 +2102,16 @@ OPCODE_LOADED:
                     cpu->pc++;
                     break;
                 case 3:
-                    cpu->tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc)<<8;
+                    cpu->tmp = MN_CPU_READ(cpu->pc)<<8;
                     cpu->tmp |= cpu->t;
                     cpu->pc++;
                     break;
                 case 4:
-                    cpu->t = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+                    cpu->t = MN_CPU_READ(cpu->tmp);
                     break;
                 case 5:
-                    cpu->pc = emu->mapper.read(emu, &emu->mapper,
-                                               (cpu->tmp&0xFF00)|
-                                               ((cpu->tmp+1)&0xFF))<<8;
+                    cpu->pc = MN_CPU_READ((cpu->tmp&0xFF00)|
+                                          ((cpu->tmp+1)&0xFF))<<8;
                     cpu->pc |= cpu->t;
                     break;
             }
@@ -2175,12 +2167,12 @@ OPCODE_LOADED:
                     cpu->pc++;
                     break;
                 case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    tmp = MN_CPU_READ(cpu->pc);
                     cpu->tmp = cpu->t|(tmp<<8);
                     cpu->pc++;
                     break;
                 case 4:
-                    emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+                    MN_CPU_READ(cpu->tmp);
                     break;
             }
             break;
@@ -2195,13 +2187,13 @@ OPCODE_LOADED:
                     cpu->pc++;
                     break;
                 case 3:
-                    tmp = emu->mapper.read(emu, &emu->mapper, cpu->pc);
+                    tmp = MN_CPU_READ(cpu->pc);
                     cpu->tmp = cpu->t|(tmp<<8);
                     cpu->pc++;
                     break;
                 case 4:
                     /* XXX: Is LAX performing only one or two reads? */
-                    cpu->a = emu->mapper.read(emu, &emu->mapper, cpu->tmp);
+                    cpu->a = MN_CPU_READ(cpu->tmp);
                     cpu->x = cpu->a;
 
                     MN_CPU_UPDATE_NZ(cpu->a);

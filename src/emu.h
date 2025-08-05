@@ -53,6 +53,11 @@ typedef struct {
     unsigned short int tmp, tmp2;
 
     int jammed;
+    int halted;
+
+    unsigned int rdy : 1;
+
+    unsigned char last_read;
 
     unsigned int irq_pin : 1;
     unsigned int nmi_pin : 1;
@@ -69,6 +74,13 @@ typedef struct {
 } MNCPU;
 
 typedef struct {
+    unsigned char primary_oam[256];
+    unsigned char secondary_oam[32];
+
+    unsigned char secondary_oam_pos;
+
+    unsigned char y;
+
     unsigned char io_bus;
     unsigned char video_mem_bus;
     unsigned int addr : 16;
@@ -102,6 +114,31 @@ typedef struct {
     unsigned int attr1_shift : 8;
     unsigned int attr2_shift : 8;
 
+    unsigned int n : 6;
+    unsigned int m : 2;
+    unsigned int entries_read : 2;
+
+    unsigned char oamaddr;
+
+    unsigned char b;
+
+    /* See https://github.com/emu-russia/breaks/blob/master/BreakingNESWiki_Dee
+     * pL/PPU/fifo.md */
+    struct {
+        unsigned char low_bp;
+        unsigned char high_bp;
+        /* The down counter is initialized to the X position of the sprite and
+         * counts down on each pixel. Once it reaches 0 the sprite starts
+         * rendering. */
+        unsigned char down_counter;
+        unsigned int palette : 2;
+        unsigned int priority : 1;
+    } sprite_fifo[8];
+
+    unsigned int big_sprites : 1;
+
+    unsigned int step : 2;
+
     /* Pixel output is delayed 4 cycles further. */
     unsigned char pixel_out[4];
 
@@ -131,10 +168,26 @@ typedef struct {
     size_t channel_num;
 } MNAPU;
 
+/* XXX: Is it a good idea to split DMA from the rest of the CPU? */
+typedef struct {
+    unsigned int cycle : 1;
+    unsigned char value;
+
+    unsigned char step;
+
+    unsigned int aligned : 1;
+
+    unsigned int do_oam_dma : 1;
+    unsigned int do_dmc_dma : 1;
+
+    unsigned char page;
+} MNDMA;
+
 typedef struct {
     MNCPU cpu;
     MNPPU ppu;
     MNAPU apu;
+    MNDMA dma;
     MNMapper mapper;
 
     int pal;
@@ -145,6 +198,7 @@ enum {
     MN_EMU_E_CPU,
     MN_EMU_E_PPU,
     MN_EMU_E_APU,
+    MN_EMU_E_DMA,
     MN_EMU_E_MAPPER,
 
     MN_EMU_E_AMOUNT

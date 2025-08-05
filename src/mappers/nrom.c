@@ -165,6 +165,11 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
         rom->bus = value;
     }else if(addr < 0x4018){
         /* TODO: Write to the APU. */
+        /* TODO: Get rid of this if. */
+        if(addr == 0x4014){
+            emu->dma.page = value;
+            emu->dma.do_oam_dma = 1;
+        }
     }else if(addr < 0x4020){
         /* CPU test mode. */
     }

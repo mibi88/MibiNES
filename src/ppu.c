@@ -35,6 +35,9 @@
 #include <ppu.h>
 
 #include <cpu.h>
+#include <dma.h>
+
+#include <stdio.h>
 
 int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 void draw_pixel(long int color)) {
@@ -62,6 +65,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->v |= x&((1<<6)-1); \
         /* Switch nametable */ \
         if(x&(1<<6)) ppu->v ^= 0x400; \
+        puts("coarse x inc"); \
     }
 
 #if 0
@@ -105,6 +109,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             } \
             ppu->v = (ppu->v&~0x03E0)|(y<<5); \
         } \
+        puts("y inc"); \
     }
 #endif
 
@@ -120,6 +125,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->attr_latch1 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2); \
         ppu->attr_latch2 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2)>> \
                            1; \
+        puts("fill"); \
     }
 
 #define MN_PPU_BG_FETCHES_DONE() \
@@ -133,11 +139,11 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 
 #define MN_PPU_BG_FETCH(step) \
     { \
+        puts("fetch"); \
         switch((step)&7){ \
             case 0: \
                 ppu->addr = 0x2000|(ppu->v&0x0FFF); \
                 ppu->video_mem_bus = ppu->addr; \
-                if(step) MN_PPU_BG_FETCHES_DONE(); \
                 break; \
             case 1: \
                 ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
@@ -173,6 +179,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
+                MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
     }
@@ -190,6 +197,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
  \
         ppu->attr2_shift >>= 1; \
         ppu->attr2_shift |= ppu->attr_latch2<<15; \
+        puts("shift"); \
     }
 
 #define MN_PPU_BG_GET_PIXEL() \
@@ -206,6 +214,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                   (((ppu->attr2_shift>>ppu->x)&1)<<1); \
  \
         pixel = color|(palette<<2); \
+        puts("pixel"); \
     }
 
 #define MN_PPU_DRAW_PIXEL(pixel) \
@@ -251,6 +260,8 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     unsigned char sprite_pixel;
     unsigned char idx;
 
+    unsigned char pixel;
+
     if(ppu->scanline == 261 && ppu->cycle == 340 && !ppu->even_frame &&
        (ppu->mask&MN_PPU_MASK_RENDER)){
         /* Skip the last cycle of the pre-render scanline on an odd frames */
@@ -258,10 +269,17 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     }
 
     if(ppu->scanline <= 239 || ppu->scanline == 261){
+        if(ppu->cycle >= 257 && ppu->cycle <= 320){
+            /* OAMADDR is repeatedly set to 0 during these cycles */
+            ppu->oamaddr = 0;
+        }
+
         if(ppu->cycle == 1){
+#if 0
             printf("l: %08b%08b h: %08b%08b v: %07b%08b\n", ppu->low_shift>>8,
                    ppu->low_shift&0xFF, ppu->high_shift>>8,
                    ppu->high_shift&0xFF, (ppu->v>>8)&0x7F, ppu->v&0xFF);
+#endif
         }
 
         if(ppu->mask&MN_PPU_MASK_RENDER){
@@ -299,9 +317,13 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             }else{
                 if(ppu->cycle >= 1 && ppu->cycle <= 256){
                     sprite_pixel = mn_ppu_sprites(ppu, emu);
+                    pixel = sprite_pixel;
 
                     /* Select the right pixel and output it */
-                    MN_PPU_DRAW_PIXEL(bg_pixel);
+                    if(((sprite_pixel&(1<<4)) && bg_pixel) || !sprite_pixel){
+                        pixel = bg_pixel;
+                    }
+                    MN_PPU_DRAW_PIXEL(pixel);
                 }
             }
         }else{
@@ -336,6 +358,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     /* Let the CPU run all 3 PPU cycles */
     if(ppu->cycles_since_cpu_cycle >= 3){
         mn_cpu_cycle(&emu->cpu, emu);
+        mn_dma_cycle(&emu->dma, emu);
         ppu->cycles_since_cpu_cycle = 0;
     }
 
@@ -351,10 +374,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         MN_PPU_BG_SHIFT();
     }else if(ppu->cycle >= 1 && ppu->cycle <= 256){
         MN_PPU_BG_FETCH(ppu->cycle-1);
-    }
-    if(ppu->cycle == 337 || ppu->cycle == 257){
-        /* XXX: Are they the right cycles to fill the shift registers? */
-        MN_PPU_BG_FETCHES_DONE();
     }
 
     /*printf("v: %06b%08b t: %06b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
@@ -386,7 +405,11 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                      ppu->low_shift&0xFF, ppu->high_shift>>8,
                      ppu->high_shift&0xFF);*/
         }
-        MN_PPU_BG_SHIFT();
+        if(ppu->cycle >= 2){
+            /* Shift registers shift for the first time at cycle 2 */
+            MN_PPU_BG_SHIFT();
+        }
+
         if(ppu->cycle == 256){
             /* Increment Y */
 
@@ -408,9 +431,212 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     return pixel;
 }
 
+#define MN_PPU_OAM_WRITE(b) \
+    { \
+        /* If secondary OAM is full, read instead (useless, so it isn't
+         * emulated) */ \
+        if(ppu->secondary_oam_pos < 32){ \
+            ppu->secondary_oam[ppu->secondary_oam_pos++] = b; \
+        } \
+    }
+
+#define MN_PPU_OAM_IN_RANGE(y) ((y) <= ppu->scanline && \
+                            (y)+(ppu->big_sprites ? 16 : 8) > ppu->scanline)
+
+#define MN_PPU_OAM_FETCH(step) \
+    { \
+        register unsigned char v_flip, h_flip; \
+        register unsigned char attr; \
+        register unsigned char y; \
+        register unsigned char pos = ((step)&~7)>>1; \
+        switch((step)&7){ \
+            case 0: \
+                ppu->addr = 0x2000|(ppu->v&0x0FFF); \
+                ppu->video_mem_bus = ppu->addr; \
+                break; \
+            case 1: \
+                ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
+                                vram_read(emu, &emu->mapper, \
+                                          ppu->addr)); \
+                break; \
+            case 2: \
+                /* Address calculated as described at
+                 * https://www.nesdev.org/wiki/PPU_scrolling#Tile_and_attribute
+                 * _fetching */ \
+                ppu->addr = (0x2000+32*30)|(ppu->v&0x0C00)| \
+                            ((ppu->v>>4)&0x38)|((ppu->v>>2)&7); \
+                ppu->video_mem_bus = ppu->addr; \
+                break; \
+            case 3: \
+                ppu->attr = (ppu->video_mem_bus = emu->mapper. \
+                             vram_read(emu, &emu->mapper, ppu->addr)); \
+                break; \
+            case 4: \
+                /* XXX: On which dots do the attributes from secondary OAM fill
+                 * the sprite FIFO a.k.a. the motion picture buffer? */ \
+                y = ppu->secondary_oam[pos]; \
+                ppu->tile_id = ppu->secondary_oam[pos+1]; \
+                attr = ppu->secondary_oam[pos+2]; \
+                ppu->sprite_fifo[(step)>>3].palette = attr&2; \
+                ppu->sprite_fifo[(step)>>3].priority = attr>>5; \
+                ppu->sprite_fifo[(step)>>3].down_counter = \
+                    ppu->secondary_oam[pos+4]; \
+                v_flip = attr>>7; \
+                ppu->addr = ((ppu->tile_id<<4)|(v_flip ? \
+                              8-((y-(ppu->scanline-1))&7) : \
+                              ((y-(ppu->scanline-1))&7)))+ \
+                            (y-(ppu->scanline-1) > 16 ? \
+                             (ppu->big_sprites^v_flip)*16 : \
+                             (ppu->big_sprites^v_flip^1)*16); \
+                ppu->video_mem_bus = ppu->addr; \
+                break; \
+            case 5: \
+                h_flip = (ppu->secondary_oam[pos+2]>>6)&1; \
+                attr = (ppu->video_mem_bus = emu->mapper. \
+                               vram_read(emu, &emu->mapper, \
+                                         ppu->addr)); \
+                if(h_flip){ \
+                    attr = (attr>>7)|((attr>>6)&1)<<1|((attr>>5)&1)<<2| \
+                           ((attr>>4)&1)<<3|((attr>>3)&1)<<4| \
+                           ((attr>>2)&1)<<5|((attr>>1)&1)<<6|(attr&1)<<7; \
+                } \
+                ppu->sprite_fifo[(step)>>3].low_bp = attr; \
+                break; \
+            case 6: \
+                y = ppu->secondary_oam[pos]; \
+                attr = ppu->secondary_oam[pos+2]; \
+                v_flip = attr>>7; \
+                ppu->addr = ((ppu->tile_id<<4)|(1<<3)|(v_flip ? \
+                              8-((y-(ppu->scanline-1))&7) : \
+                              ((y-(ppu->scanline-1))&7)))+ \
+                            (y-(ppu->scanline-1) > 16 ? \
+                             (ppu->big_sprites^v_flip)*16 : \
+                             (ppu->big_sprites^v_flip^1)*16); \
+                ppu->video_mem_bus = ppu->addr; \
+                break; \
+            case 7: \
+                h_flip = (ppu->secondary_oam[pos+2]>>6)&1; \
+                attr = (ppu->video_mem_bus = emu->mapper. \
+                                vram_read(emu, &emu->mapper, \
+                                          ppu->addr)); \
+                if(h_flip){ \
+                    attr = (attr>>7)|((attr>>6)&1)<<1|((attr>>5)&1)<<2| \
+                           ((attr>>4)&1)<<3|((attr>>3)&1)<<4| \
+                           ((attr>>2)&1)<<5|((attr>>1)&1)<<6|(attr&1)<<7; \
+                } \
+                ppu->sprite_fifo[(step)>>3].high_bp = attr; \
+                break; \
+        } \
+    }
+
 unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
-    /* TODO */
-    return 0;
+    register unsigned char read = 0;
+    unsigned char sprite_pixel = 0;
+    unsigned char i;
+
+    if(ppu->cycle >= 1 && ppu->cycle <= 64){
+        ppu->secondary_oam[(ppu->cycle-1)>>1] = 0xFF;
+    }else if(ppu->cycle <= 256){
+        if(ppu->cycle == 65){
+            /* TODO: Use OAMADDR for sprite evaluation */
+            ppu->n = 0;
+            ppu->m = 0;
+            ppu->secondary_oam_pos = 0;
+            ppu->step = 0;
+        }
+        if(ppu->cycle&1){
+            /* Data is read from primary OAM */
+            ppu->b = ppu->primary_oam[ppu->n*4+ppu->m];
+        }else{
+            /* Data is written to secondary OAM */
+
+            switch(ppu->step){
+                case 0:
+                    /* Step 1 */
+                    if(!ppu->m){
+                        ppu->y = ppu->b;
+                        ppu->m++;
+                    }else if(MN_PPU_OAM_IN_RANGE(ppu->y)){
+                        /* The Y coordinate is in range, so we copy the other
+                         * bytes */
+                        if(ppu->m == 3) ppu->step++;
+                        ppu->m++;
+                    }
+                    break;
+                case 1:
+                    /* Step 2 */
+                    ppu->n++;
+                    if(!ppu->n){
+                        /* n has overflowed back to 0, all sprites got
+                         * evaluated */
+                        ppu->step = 3;
+                        break;
+                    }
+                    if(ppu->secondary_oam_pos >= 32){
+                        /* 8 sprites have been found */
+                        ppu->m = 0;
+                        ppu->entries_read = 0;
+                        ppu->step++;
+                    }else{
+                        ppu->step = 0;
+                    }
+                    break;
+                case 2:
+                    /* Step 3 */
+                    if(MN_PPU_OAM_IN_RANGE(ppu->b)){
+                        ppu->sprite_overflow = 1;
+                        ppu->entries_read = 0;
+                        read = 1;
+                    }else{
+                        ppu->n++;
+                        ppu->m++;
+                        if(!ppu->n){
+                            ppu->m = 0;
+                            ppu->step++;
+                        }
+                    }
+                    if(ppu->entries_read || read){
+                        ppu->m++;
+                        if(!ppu->m) ppu->n++;
+                        ppu->entries_read++;
+                    }
+                    break;
+                case 3:
+                    /* Step 4 */
+                    /* Fail to write OAM[n][0] */
+                    break;
+            }
+
+            MN_PPU_OAM_WRITE(ppu->b);
+        }
+    }else if(ppu->cycle <= 320){
+        /* Sprite fetches */
+        MN_PPU_OAM_FETCH(ppu->cycle-257);
+    }else if(ppu->cycle <= 340 || !ppu->cycle){
+        /* Background pipeline initialization */
+    }
+
+    if(ppu->cycle >= 1 && ppu->cycle <= 256){
+        /* Produce a pixel */
+
+        for(i=0;i<8;i++){
+            if(ppu->sprite_fifo[i].down_counter){
+                /* Decrease the counter */
+                ppu->sprite_fifo[i].down_counter--;
+            }else{
+                /* Get a sprite pixel */
+                sprite_pixel = (ppu->sprite_fifo[i].low_bp&1)|
+                               (ppu->sprite_fifo[i].high_bp&1)>>1|
+                               ppu->sprite_fifo[i].palette<<2|
+                               ppu->sprite_fifo[i].priority<<4;
+
+                /* Shift the shift registers */
+                ppu->sprite_fifo[i].low_bp >>= 1;
+                ppu->sprite_fifo[i].high_bp >>= 1;
+            }
+        }
+    }
+    return sprite_pixel;
 }
 
 unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
@@ -434,6 +660,7 @@ unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
         case MN_PPU_OAMADDR:
             break;
         case MN_PPU_OAMDATA:
+            ppu->io_bus = ppu->primary_oam[ppu->oamaddr];
             break;
         case MN_PPU_PPUSCROLL:
             break;
@@ -473,6 +700,7 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
             ppu->t &= ~(3<<10);
             ppu->t |= (value&3)<<10;
             ppu->ctrl = value;
+            ppu->big_sprites = value>>6;
             break;
         case MN_PPU_MASK:
             if(ppu->since_start < ppu->startup_time) break;
@@ -484,8 +712,11 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
         case MN_PPU_STATUS:
             break;
         case MN_PPU_OAMADDR:
+            /* TODO: Emulate corruption */
+            ppu->oamaddr = value;
             break;
         case MN_PPU_OAMDATA:
+            ppu->primary_oam[ppu->oamaddr] = value;
             break;
         case MN_PPU_PPUSCROLL:
             if(ppu->since_start < ppu->startup_time) break;
