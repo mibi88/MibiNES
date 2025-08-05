@@ -137,6 +137,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             case 0: \
                 ppu->addr = 0x2000|(ppu->v&0x0FFF); \
                 ppu->video_mem_bus = ppu->addr; \
+                if(step) MN_PPU_BG_FETCHES_DONE(); \
                 break; \
             case 1: \
                 ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
@@ -172,7 +173,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
-                MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
     }
@@ -225,7 +225,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 #define MN_PPU_INC_CYCLE() \
     { \
         ppu->cycle++; \
-        if(ppu->cycle > 341){ \
+        if(ppu->cycle > 340){ \
             ppu->cycle = 0; \
             ppu->scanline++; \
             if(ppu->scanline > 261){ \
@@ -258,7 +258,12 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     }
 
     if(ppu->scanline <= 239 || ppu->scanline == 261){
-        if(ppu->cycle == 1) printf("l: %08b%08b h: %08b%08b v: %07b%08b\n", ppu->low_shift>>8, ppu->low_shift&0xFF, ppu->high_shift>>8, ppu->high_shift&0xFF, (ppu->v>>8)&0x7F, ppu->v&0xFF);
+        if(ppu->cycle == 1){
+            printf("l: %08b%08b h: %08b%08b v: %07b%08b\n", ppu->low_shift>>8,
+                   ppu->low_shift&0xFF, ppu->high_shift>>8,
+                   ppu->high_shift&0xFF, (ppu->v>>8)&0x7F, ppu->v&0xFF);
+        }
+
         if(ppu->mask&MN_PPU_MASK_RENDER){
             /*printf("sv: %07b%08b %u %u\n", (ppu->t>>8)&((1<<8)-1),
                      ppu->t&0xFF, ppu->cycle, ppu->scanline);*/
@@ -343,12 +348,32 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     /* Memory fetches */
     if(ppu->cycle >= 321 && ppu->cycle <= 336){
         MN_PPU_BG_FETCH(ppu->cycle-321);
+        MN_PPU_BG_SHIFT();
     }else if(ppu->cycle >= 1 && ppu->cycle <= 256){
         MN_PPU_BG_FETCH(ppu->cycle-1);
+    }
+    if(ppu->cycle == 337 || ppu->cycle == 257){
+        /* XXX: Are they the right cycles to fill the shift registers? */
+        MN_PPU_BG_FETCHES_DONE();
     }
 
     /*printf("v: %06b%08b t: %06b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
            ppu->t&0xFF);*/
+
+    if(ppu->cycle >= 337 && ppu->cycle <= 340){
+        /* Dummy nametable fetches */
+        switch((ppu->cycle-337)&3){
+            case 0:
+                ppu->addr = 0x2000|(ppu->v&0x0FFF);
+                ppu->video_mem_bus = ppu->addr;
+                break;
+            case 1:
+                ppu->tile_id = (ppu->video_mem_bus = emu->mapper.
+                                vram_read(emu, &emu->mapper,
+                                          ppu->addr));
+                break;
+        }
+    }
 
     if(ppu->cycle == 0){
         /* Cycle 0 is an IDLE cycle */
@@ -360,8 +385,8 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
             /*printf("%08b%08b %08b%08b\n", ppu->low_shift>>8,
                      ppu->low_shift&0xFF, ppu->high_shift>>8,
                      ppu->high_shift&0xFF);*/
-            MN_PPU_BG_SHIFT();
         }
+        MN_PPU_BG_SHIFT();
         if(ppu->cycle == 256){
             /* Increment Y */
 
