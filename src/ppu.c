@@ -309,18 +309,23 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     ppu->v |= cpu->t&((((1<<4)-1)<<11)|((1<<5)-1)<<5);
                 }
             }else{
-                if(ppu->cycle >= 1 && ppu->cycle <= 256){
-                    sprite_pixel = mn_ppu_sprites(ppu, emu);
+                sprite_pixel = mn_ppu_sprites(ppu, emu);
 
+                if(ppu->cycle >= 1 && ppu->cycle <= 256){
+
+#if 1
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
+#endif
 
                     pixel = sprite_pixel;
 
                     /* Select the right pixel and output it */
+#if 1
                     if(((sprite_pixel&(1<<4)) && bg_pixel) || !sprite_pixel){
                         pixel = bg_pixel;
                     }
+#endif
                     MN_PPU_DRAW_PIXEL(pixel);
                 }
             }
@@ -478,14 +483,14 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 ppu->sprite_fifo[(step)>>3].palette = attr&2; \
                 ppu->sprite_fifo[(step)>>3].priority = attr>>5; \
                 ppu->sprite_fifo[(step)>>3].down_counter = \
-                    ppu->secondary_oam[pos+4]; \
+                    ppu->secondary_oam[pos+3]; \
                 v_flip = attr>>7; \
                 ppu->addr = ((ppu->tile_id<<4)|(v_flip ? \
-                              8-((y-(ppu->scanline-1))&7) : \
-                              ((y-(ppu->scanline-1))&7)))+ \
-                            (y-(ppu->scanline-1) > 16 ? \
+                              8-(((ppu->scanline-1)-y)&7) : \
+                              (((ppu->scanline-1)-y)&7)))/*+ \
+                            ((ppu->scanline-1)-y > 16 ? \
                              (ppu->big_sprites^v_flip)*16 : \
-                             (ppu->big_sprites^v_flip^1)*16); \
+                             (ppu->big_sprites^v_flip^1)*16)*/; \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
             case 5: \
@@ -498,6 +503,8 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                            ((attr>>4)&1)<<3|((attr>>3)&1)<<4| \
                            ((attr>>2)&1)<<5|((attr>>1)&1)<<6|(attr&1)<<7; \
                 } \
+                /* XXX: Is this accurate? */ \
+                if(ppu->secondary_oam_pos < pos) attr = 0; \
                 ppu->sprite_fifo[(step)>>3].low_bp = attr; \
                 break; \
             case 6: \
@@ -505,11 +512,11 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 attr = ppu->secondary_oam[pos+2]; \
                 v_flip = attr>>7; \
                 ppu->addr = ((ppu->tile_id<<4)|(1<<3)|(v_flip ? \
-                              8-((y-(ppu->scanline-1))&7) : \
-                              ((y-(ppu->scanline-1))&7)))+ \
-                            (y-(ppu->scanline-1) > 16 ? \
+                              8-(((ppu->scanline-1)-y)&7) : \
+                              (((ppu->scanline-1)-y)&7)))/*+ \
+                            ((ppu->scanline-1)-y > 16 ? \
                              (ppu->big_sprites^v_flip)*16 : \
-                             (ppu->big_sprites^v_flip^1)*16); \
+                             (ppu->big_sprites^v_flip^1)*16)*/; \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
             case 7: \
@@ -522,6 +529,8 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                            ((attr>>4)&1)<<3|((attr>>3)&1)<<4| \
                            ((attr>>2)&1)<<5|((attr>>1)&1)<<6|(attr&1)<<7; \
                 } \
+                /* XXX: Is this accurate? */ \
+                if(ppu->secondary_oam_pos < pos) attr = 0; \
                 ppu->sprite_fifo[(step)>>3].high_bp = attr; \
                 break; \
         } \
@@ -554,11 +563,14 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                     if(!ppu->m){
                         ppu->y = ppu->b;
                         ppu->m++;
+                        puts("byte 0");
                     }else if(MN_PPU_OAM_IN_RANGE(ppu->y)){
                         /* The Y coordinate is in range, so we copy the other
                          * bytes */
                         if(ppu->m == 3) ppu->step++;
                         ppu->m++;
+                        /* FIXME */
+                        puts("copy");
                     }
                     break;
                 case 1:
@@ -576,6 +588,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                         ppu->entries_read = 0;
                         ppu->step++;
                     }else{
+                        ppu->m = 0;
                         ppu->step = 0;
                     }
                     break;
