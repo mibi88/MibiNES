@@ -289,6 +289,10 @@ void mn_gui_run(void) {
             if(emu.cpu.jammed && !message){
                 fprintf(stderr, "CPU jammed! opcode: %02x pc: %04x\n",
                         emu.cpu.opcode, emu.cpu.pc);
+                message = 1;
+            }
+        }
+    }
 #if MN_GUI_CPU_DUMP
                 {
                     size_t i, n;
@@ -303,10 +307,6 @@ void mn_gui_run(void) {
                     }
                 }
 #endif
-                message = 1;
-            }
-        }
-    }
 #if MN_GUI_PPU_DUMP
     {
         size_t i, n;
@@ -316,6 +316,14 @@ void mn_gui_run(void) {
             for(n=0;n<0x10;n++){
                 printf("%02x ", emu.mapper.vram_read(&emu,
                        &emu.mapper, i+n));
+            }
+            puts("");
+        }
+        puts("PPU primary OAM Dump:");
+        for(i=0;i<0x100;i+=4){
+            printf("%04lx: ", i);
+            for(n=0;n<4;n++){
+                printf("%02x ", emu.ppu.primary_oam[i+n]);
             }
             puts("");
         }

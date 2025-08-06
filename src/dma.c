@@ -60,7 +60,7 @@ void mn_dma_cycle(MNDMA *dma, MNEmu *emu) {
                 case 0:
                     /* get cycle */
                     dma->value = emu->mapper.read(emu, &emu->mapper,
-                                                  dma->page<<8|dma->step);
+                                                  (dma->page<<8)|dma->step);
                     break;
                 case 1:
                     /* put cycle */

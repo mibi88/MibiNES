@@ -489,7 +489,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
     { \
         switch(cpu->cycle){ \
             case 1: \
-                cpu->target_cycle = 4; \
+                cpu->target_cycle = 5; \
                 break; \
             case 2: \
                 cpu->pc++; \

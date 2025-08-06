@@ -37,7 +37,7 @@
 
 #include <stddef.h>
 
-#define MN_GUI_CPU_DUMP 0
+#define MN_GUI_CPU_DUMP 1
 #define MN_GUI_PPU_DUMP 1
 
 int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size);

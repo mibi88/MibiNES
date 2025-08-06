@@ -65,7 +65,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->v |= x&((1<<6)-1); \
         /* Switch nametable */ \
         if(x&(1<<6)) ppu->v ^= 0x400; \
-        puts("coarse x inc"); \
     }
 
 #if 0
@@ -109,7 +108,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             } \
             ppu->v = (ppu->v&~0x03E0)|(y<<5); \
         } \
-        puts("y inc"); \
     }
 #endif
 
@@ -125,7 +123,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->attr_latch1 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2); \
         ppu->attr_latch2 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2)>> \
                            1; \
-        puts("fill"); \
     }
 
 #define MN_PPU_BG_FETCHES_DONE() \
@@ -139,7 +136,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 
 #define MN_PPU_BG_FETCH(step) \
     { \
-        puts("fetch"); \
         switch((step)&7){ \
             case 0: \
                 ppu->addr = 0x2000|(ppu->v&0x0FFF); \
@@ -197,7 +193,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
  \
         ppu->attr2_shift >>= 1; \
         ppu->attr2_shift |= ppu->attr_latch2<<15; \
-        puts("shift"); \
     }
 
 #define MN_PPU_BG_GET_PIXEL() \
@@ -214,7 +209,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                   (((ppu->attr2_shift>>ppu->x)&1)<<1); \
  \
         pixel = color|(palette<<2); \
-        puts("pixel"); \
     }
 
 #define MN_PPU_DRAW_PIXEL(pixel) \
@@ -317,6 +311,10 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             }else{
                 if(ppu->cycle >= 1 && ppu->cycle <= 256){
                     sprite_pixel = mn_ppu_sprites(ppu, emu);
+
+                    if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
+                    if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
+
                     pixel = sprite_pixel;
 
                     /* Select the right pixel and output it */
@@ -717,6 +715,7 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
             break;
         case MN_PPU_OAMDATA:
             ppu->primary_oam[ppu->oamaddr] = value;
+            ppu->oamaddr++;
             break;
         case MN_PPU_PPUSCROLL:
             if(ppu->since_start < ppu->startup_time) break;
