@@ -72,8 +72,8 @@ static int nw, nh;
 static unsigned long int last_time;
 
 static int keys1[BUTTON_NUM] = {
-    XK_E,
-    XK_R,
+    XK_e,
+    XK_r,
     XK_space,
     XK_Return,
     XK_Up,
@@ -83,14 +83,14 @@ static int keys1[BUTTON_NUM] = {
 };
 
 static int keys2[BUTTON_NUM] = {
-    XK_O,
-    XK_I,
-    XK_M,
-    XK_P,
-    XK_U,
-    XK_J,
-    XK_H,
-    XK_K
+    XK_o,
+    XK_i,
+    XK_m,
+    XK_p,
+    XK_u,
+    XK_j,
+    XK_h,
+    XK_k
 };
 
 static unsigned char buttons1 = 0;
