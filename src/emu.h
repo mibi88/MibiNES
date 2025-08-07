@@ -184,10 +184,32 @@ typedef struct {
 } MNDMA;
 
 typedef struct {
+    unsigned int strobe : 1;
+    unsigned char reg;
+
+    int (*init)(void *_ctrl, void *_emu);
+    unsigned char (*load_reg)(void *_ctrl, void *_emu);
+    unsigned char (*shift_reg)(void *_ctrl, void *_emu);
+    unsigned char (*read)(void *_ctrl, void *_emu);
+    void (*free)(void *_ctrl, void *_emu);
+
+    /* This function can take any number and types of arguments to keep things
+     * flexible, in case I want to emulate other peripherals than the standard
+     * NES controller. */
+    unsigned char (*get_input)();
+
+    void *data;
+} MNCtrl;
+
+typedef struct {
     MNCPU cpu;
     MNPPU ppu;
     MNAPU apu;
     MNDMA dma;
+
+    MNCtrl ctrl1;
+    MNCtrl ctrl2;
+
     MNMapper mapper;
 
     int pal;
@@ -200,13 +222,15 @@ enum {
     MN_EMU_E_APU,
     MN_EMU_E_DMA,
     MN_EMU_E_MAPPER,
+    MN_EMU_E_CTRL,
 
     MN_EMU_E_AMOUNT
 };
 
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
-                unsigned char *rom, unsigned char *palette, size_t size,
-                int pal);
+                unsigned char player1_input(), unsigned char player2_input(),
+                MNCtrl ctrl1_type, MNCtrl ctrl2_type, unsigned char *rom,
+                unsigned char *palette, size_t size, int pal);
 void mn_emu_pixel(MNEmu *emu);
 void mn_emu_frame(MNEmu *emu);
 void mn_emu_free(MNEmu *emu);

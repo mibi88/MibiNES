@@ -48,6 +48,8 @@
 #define W 256
 #define H 240
 
+#define BUTTON_NUM 8
+
 static Display *display;
 static Window root;
 static Window window;
@@ -69,11 +71,46 @@ static int nw, nh;
 
 static unsigned long int last_time;
 
+static int keys1[BUTTON_NUM] = {
+    XK_E,
+    XK_R,
+    XK_space,
+    XK_Return,
+    XK_Up,
+    XK_Down,
+    XK_Left,
+    XK_Right
+};
+
+static int keys2[BUTTON_NUM] = {
+    XK_O,
+    XK_I,
+    XK_M,
+    XK_P,
+    XK_U,
+    XK_J,
+    XK_H,
+    XK_K
+};
+
+static unsigned char buttons1 = 0;
+static unsigned char buttons2 = 0;
+
 static unsigned long mn_gui_get_time(void) {
     struct timespec time;
     clock_gettime(CLOCK_REALTIME, &time);
     return time.tv_nsec/(1e6)+time.tv_sec*1000;
 }
+
+static unsigned char mn_gui_player1_buttons(void) {
+    return buttons1;
+}
+
+static unsigned char mn_gui_player2_buttons(void) {
+    return buttons2;
+}
+
+extern MNCtrl mn_nesctrl;
 
 int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
     XSetWindowAttributes attr;
@@ -86,7 +123,9 @@ int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
 
     last_time = mn_gui_get_time();
 
-    if(mn_emu_init(&emu, mn_gui_pixel, rom, palette, size, 0)){
+    if(mn_emu_init(&emu, mn_gui_pixel, mn_gui_player1_buttons,
+                   mn_gui_player2_buttons, mn_nesctrl, mn_nesctrl, rom,
+                   palette, size, 0)){
         return 1;
     }
 
@@ -283,6 +322,32 @@ void mn_gui_run(void) {
                 nw = win_attr.width;
                 nh = win_attr.height;
                 needs_resize = 1;
+            }else if(event.type == KeyPress){
+                int keysym;
+                size_t i;
+
+                keysym = XLookupKeysym(&event.xkey, 0);
+                for(i=0;i<BUTTON_NUM;i++){
+                    if(keysym == keys1[i]){
+                        buttons1 |= 1<<i;
+                    }
+                    if(keysym == keys2[i]){
+                        buttons2 |= 1<<i;
+                    }
+                }
+            }else if(event.type == KeyRelease){
+                int keysym;
+                size_t i;
+
+                keysym = XLookupKeysym(&event.xkey, 0);
+                for(i=0;i<BUTTON_NUM;i++){
+                    if(keysym == keys1[i]){
+                        buttons1 &= ~(1<<i);
+                    }
+                    if(keysym == keys2[i]){
+                        buttons2 |= ~(1<<i);
+                    }
+                }
             }
         }else{
             mn_emu_frame(&emu);
@@ -294,18 +359,18 @@ void mn_gui_run(void) {
         }
     }
 #if MN_GUI_CPU_DUMP
-                {
-                    size_t i, n;
-                    puts("CPU MEM Dump:");
-                    for(i=0;i<0x1000;i+=0x10){
-                        printf("%04lx: ", i);
-                        for(n=0;n<0x10;n++){
-                            printf("%02x ", emu.mapper.read(&emu,
-                                   &emu.mapper, i+n));
-                        }
-                        puts("");
-                    }
-                }
+    {
+        size_t i, n;
+        puts("CPU MEM Dump:");
+        for(i=0;i<0x1000;i+=0x10){
+            printf("%04lx: ", i);
+            for(n=0;n<0x10;n++){
+                printf("%02x ", emu.mapper.read(&emu,
+                       &emu.mapper, i+n));
+            }
+            puts("");
+        }
+    }
 #endif
 #if MN_GUI_PPU_DUMP
     {

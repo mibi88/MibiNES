@@ -32,39 +32,59 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MN_MAPPER_H
-#define MN_MAPPER_H
+#include <nesctrl.h>
 
-#include <stddef.h>
+static int mn_nesctrl_init(void *_ctrl, void *_emu) {
+    /* There is nothing to do here */
+    (void)_emu;
+    (void)_ctrl;
 
-/* TODO: Make open bus easily accessible */
+    return 0;
+}
 
-typedef struct {
-    int (*init)(void *_emu, void *_mapper, unsigned char *rom, size_t size);
-    unsigned char (*read)(void *_emu, void *_mapper, unsigned short int addr);
-    void (*write)(void *_emu, void *_mapper, unsigned short int addr,
-                  unsigned char value);
-    unsigned char (*vram_read)(void *_emu, void *_mapper,
-                               unsigned short int addr);
-    void (*vram_write)(void *_emu, void *_mapper, unsigned short int addr,
-                  unsigned char value);
-    void (*reset)(void *_emu, void *_mapper);
-    void (*hard_reset)(void *_emu, void *_mapper);
-    void (*free)(void *_emu, void *_mapper);
+static unsigned char mn_nesctrl_load_reg(void *_ctrl, void *_emu) {
+    MNCtrl *ctrl = _ctrl;
+    (void)_emu;
 
-    void *data;
-} MNMapper;
+    ctrl->reg = ctrl->get_input();
 
-enum {
-    MN_MAPPER_E_NONE,
-    MN_MAPPER_E_SIZE,
-    MN_MAPPER_E_UNKNOWN,
+    return ctrl->reg;
+}
 
-    MN_MAPPER_E_AMOUNT
+static unsigned char mn_nesctrl_shift_reg(void *_ctrl, void *_emu) {
+    MNCtrl *ctrl = _ctrl;
+    (void)_emu;
+
+    ctrl->reg >>= 1;
+    ctrl->reg |= 1<<7;
+
+    return ctrl->reg;
+}
+
+static unsigned char mn_nesctrl_read(void *_ctrl, void *_emu) {
+    MNCtrl *ctrl = _ctrl;
+    (void)_emu;
+
+    return ctrl->reg&1;
+}
+
+static void mn_nesctrl_free(void *_emu, void *_ctrl) {
+    /* There is nothing to do here */
+    (void)_emu;
+    (void)_ctrl;
+}
+
+MNCtrl mn_nesctrl = {
+    0,
+    0,
+
+    mn_nesctrl_init,
+    mn_nesctrl_load_reg,
+    mn_nesctrl_shift_reg,
+    mn_nesctrl_read,
+    mn_nesctrl_free,
+
+    NULL,
+
+    NULL
 };
-
-int mn_mapper_find(MNMapper *mapper, unsigned char *rom, size_t size);
-unsigned long int mn_mapper_rand(unsigned long int *seed);
-void mn_mapper_ram_init(unsigned char *buffer, size_t size);
-
-#endif /* MN_MAPPER_H */

@@ -39,10 +39,20 @@
 #include <apu.h>
 #include <dma.h>
 
+#include <ctrl.h>
+
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
-                unsigned char *rom, unsigned char *palette, size_t size,
-                int pal) {
+                unsigned char player1_input(), unsigned char player2_input(),
+                MNCtrl ctrl1_type, MNCtrl ctrl2_type, unsigned char *rom,
+                unsigned char *palette, size_t size, int pal) {
     emu->pal = pal;
+
+    if(mn_ctrl_init(&emu->ctrl1, emu, ctrl1_type, player1_input)){
+        return MN_EMU_E_CTRL;
+    }
+    if(mn_ctrl_init(&emu->ctrl2, emu, ctrl2_type, player2_input)){
+        return MN_EMU_E_CTRL;
+    }
 
     if(mn_cpu_init(&emu->cpu)){
         return MN_EMU_E_CPU;
@@ -72,6 +82,8 @@ int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
 
 void mn_emu_step(MNEmu *emu) {
     mn_ppu_cycle(&emu->ppu, emu);
+    mn_ctrl_cycle(&emu->ctrl1, emu);
+    mn_ctrl_cycle(&emu->ctrl2, emu);
 }
 
 void mn_emu_cycle(MNEmu *emu) {

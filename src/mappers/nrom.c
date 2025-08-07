@@ -38,6 +38,8 @@
 
 #include <ppu.h>
 
+#include <ctrl.h>
+
 #include <stdlib.h>
 
 #if MN_NROM_DEBUG_RW
@@ -137,6 +139,13 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
         return (rom->bus = mn_ppu_read(&emu->ppu, emu, addr&7));
     }else if(addr < 0x4018){
         /* TODO: Read from the APU. */
+        /* TODO: Let the APU handle $4016 and $4017. */
+        /* TODO: Correctly return open bus for reads at $4016 and $4017. */
+        if(addr == 0x4016){
+            return (rom->bus = mn_ctrl_read(&emu->ctrl1, emu));
+        }else if(addr == 0x4017){
+            return (rom->bus = mn_ctrl_read(&emu->ctrl2, emu));
+        }
     }else if(addr < 0x4020){
         /* CPU test mode. */
     }
@@ -169,6 +178,12 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
         if(addr == 0x4014){
             emu->dma.page = value;
             emu->dma.do_oam_dma = 1;
+        }
+        /* TODO: Let the APU handle $4016. */
+        if(addr == 0x4016){
+            rom->bus = value;
+            emu->ctrl1.strobe = value;
+            emu->ctrl2.strobe = value;
         }
     }else if(addr < 0x4020){
         /* CPU test mode. */

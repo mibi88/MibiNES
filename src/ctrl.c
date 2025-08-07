@@ -32,39 +32,37 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MN_MAPPER_H
-#define MN_MAPPER_H
+#include <ctrl.h>
 
-#include <stddef.h>
 
-/* TODO: Make open bus easily accessible */
+int mn_ctrl_init(MNCtrl *ctrl, MNEmu *emu, MNCtrl controller_type,
+                 unsigned char get_input()) {
+    *ctrl = controller_type;
 
-typedef struct {
-    int (*init)(void *_emu, void *_mapper, unsigned char *rom, size_t size);
-    unsigned char (*read)(void *_emu, void *_mapper, unsigned short int addr);
-    void (*write)(void *_emu, void *_mapper, unsigned short int addr,
-                  unsigned char value);
-    unsigned char (*vram_read)(void *_emu, void *_mapper,
-                               unsigned short int addr);
-    void (*vram_write)(void *_emu, void *_mapper, unsigned short int addr,
-                  unsigned char value);
-    void (*reset)(void *_emu, void *_mapper);
-    void (*hard_reset)(void *_emu, void *_mapper);
-    void (*free)(void *_emu, void *_mapper);
+    ctrl->strobe = 1;
+    ctrl->reg = 0;
 
-    void *data;
-} MNMapper;
+    ctrl->get_input = get_input;
 
-enum {
-    MN_MAPPER_E_NONE,
-    MN_MAPPER_E_SIZE,
-    MN_MAPPER_E_UNKNOWN,
+    return ctrl->init(ctrl, emu);
+}
 
-    MN_MAPPER_E_AMOUNT
-};
+void mn_ctrl_cycle(MNCtrl *ctrl, MNEmu *emu) {
+    if(ctrl->strobe){
+        ctrl->load_reg(ctrl, emu);
+    }
+}
 
-int mn_mapper_find(MNMapper *mapper, unsigned char *rom, size_t size);
-unsigned long int mn_mapper_rand(unsigned long int *seed);
-void mn_mapper_ram_init(unsigned char *buffer, size_t size);
+unsigned char mn_ctrl_read(MNCtrl *ctrl, MNEmu *emu) {
+    unsigned char v;
 
-#endif /* MN_MAPPER_H */
+    v = ctrl->read(ctrl, emu);
+
+    ctrl->shift_reg(ctrl, emu);
+
+    return v;
+}
+
+void mn_ctrl_free(MNCtrl *ctrl, MNEmu *emu) {
+    ctrl->free(ctrl, emu);
+}
