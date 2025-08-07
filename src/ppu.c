@@ -313,7 +313,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 
                 if(ppu->cycle >= 1 && ppu->cycle <= 256){
 
-#if 0
+#if 1
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
 #endif
@@ -321,9 +321,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     pixel = sprite_pixel;
 
                     /* Select the right pixel and output it */
-#if 0
-                    if(((sprite_pixel&(1<<4)) && (bg_pixel&2)) ||
-                       !(sprite_pixel&2)){
+#if 1
+                    if(((sprite_pixel&(1<<4)) && (bg_pixel&3)) ||
+                       !(sprite_pixel&3)){
                         pixel = bg_pixel;
                     }
 #endif
