@@ -60,11 +60,11 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 
 #define MN_PPU_BG_COARSE_X_INC() \
     { \
-        register unsigned char x = ((ppu->v&((1<<6)-1))+1); \
-        ppu->v = ppu->v&~((1<<6)-1); \
-        ppu->v |= x&((1<<6)-1); \
+        register unsigned char x = ((ppu->v&((1<<5)-1))+1); \
+        ppu->v = ppu->v&~((1<<5)-1); \
+        ppu->v |= x&((1<<5)-1); \
         /* Switch nametable */ \
-        if(x&(1<<6)) ppu->v ^= 0x400; \
+        if(x&(1<<5)) ppu->v ^= 0x400; \
     }
 
 #if 0
@@ -159,7 +159,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                              vram_read(emu, &emu->mapper, ppu->addr)); \
                 break; \
             case 4: \
-                ppu->addr = (ppu->tile_id<<4)|(ppu->v>>12); \
+                ppu->addr = ((ppu->ctrl&1<<4)<<(12-4))|(ppu->tile_id<<4)| \
+                            ((ppu->v>>12)&7); \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
             case 5: \
@@ -168,7 +169,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                                          ppu->addr)); \
                 break; \
             case 6: \
-                ppu->addr = (ppu->tile_id<<4)|(1<<3)|(ppu->v>>12); \
+                ppu->addr = ((ppu->ctrl&1<<4)<<(12-4))|(ppu->tile_id<<4)| \
+                            (1<<3)|((ppu->v>>12)&7); \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
             case 7: \
@@ -255,6 +257,8 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     unsigned char idx;
 
     unsigned char pixel;
+
+    unsigned short int old_v = ppu->v;
 
     if(ppu->scanline == 261 && ppu->cycle == 340 && !ppu->even_frame &&
        (ppu->mask&MN_PPU_MASK_RENDER)){
@@ -351,6 +355,10 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
         /* Vertical blanking lines */
     }
 
+    if((old_v&(((1<<5)-1)<<5)) != (ppu->v&(((1<<5)-1)<<5))){
+        printf("coarse Y change: %u %u\n", ppu->scanline, ppu->cycle);
+    }
+
     if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank) cpu->nmi_pin = 0;
 
     MN_PPU_INC_CYCLE();
@@ -432,6 +440,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 break;
         }
     }
+
     return pixel;
 }
 
@@ -480,6 +489,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                  * the sprite FIFO a.k.a. the motion picture buffer? */ \
                 y = ppu->secondary_oam[pos]; \
                 ppu->tile_id = ppu->secondary_oam[pos+1]; \
+                if(ppu->big_sprites) ppu->tile_id <<= 1; \
                 attr = ppu->secondary_oam[pos+2]; \
                 ppu->sprite_fifo[(step)>>3].palette = attr&2; \
                 ppu->sprite_fifo[(step)>>3].priority = attr>>5; \
@@ -488,10 +498,14 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 v_flip = attr>>7; \
                 ppu->addr = ((ppu->tile_id<<4)|(v_flip ? \
                               8-(((ppu->scanline-1)-y)&7) : \
-                              (((ppu->scanline-1)-y)&7)))/*+ \
+                              (((ppu->scanline-1)-y)&7)))+ \
                             ((ppu->scanline-1)-y > 16 ? \
                              (ppu->big_sprites^v_flip)*16 : \
-                             (ppu->big_sprites^v_flip^1)*16)*/; \
+                             (ppu->big_sprites ? \
+                              (ppu->big_sprites^v_flip^1)*16 : 0)); \
+                if(!ppu->big_sprites){ \
+                    ppu->addr |= ((ppu->ctrl&1<<3)<<(12-3)); \
+                } \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
             case 5: \
@@ -514,10 +528,14 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 v_flip = attr>>7; \
                 ppu->addr = ((ppu->tile_id<<4)|(1<<3)|(v_flip ? \
                               8-(((ppu->scanline-1)-y)&7) : \
-                              (((ppu->scanline-1)-y)&7)))/*+ \
+                              (((ppu->scanline-1)-y)&7)))+ \
                             ((ppu->scanline-1)-y > 16 ? \
                              (ppu->big_sprites^v_flip)*16 : \
-                             (ppu->big_sprites^v_flip^1)*16)*/; \
+                             (ppu->big_sprites ? \
+                              (ppu->big_sprites^v_flip^1)*16 : 0)); \
+                if(!ppu->big_sprites){ \
+                    ppu->addr |= ((ppu->ctrl&1<<3)<<(12-3)); \
+                } \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
             case 7: \
