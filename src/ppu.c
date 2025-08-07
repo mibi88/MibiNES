@@ -115,10 +115,10 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     { \
         /* The bitplanes go into the high 8-bit of two 16-bit shift
          * registers. */ \
-        ppu->low_shift &= 0xFF; \
-        ppu->high_shift &= 0xFF; \
-        ppu->low_shift |= ppu->low_bp<<8; \
-        ppu->high_shift |= ppu->high_bp<<8; \
+        ppu->low_shift &= ~0xFF; \
+        ppu->high_shift &= ~0xFF; \
+        ppu->low_shift |= ppu->low_bp; \
+        ppu->high_shift |= ppu->high_bp; \
  \
         ppu->attr_latch1 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2); \
         ppu->attr_latch2 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2)>> \
@@ -183,16 +183,16 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 #define MN_PPU_BG_SHIFT() \
     { \
         /* Shift the shift registers */ \
-        ppu->low_shift >>= 1; \
-        ppu->low_shift |= 1<<15; \
-        ppu->high_shift >>= 1; \
-        ppu->high_shift |= 1<<15; \
+        ppu->low_shift <<= 1; \
+        ppu->low_shift |= 1; \
+        ppu->high_shift <<= 1; \
+        ppu->high_shift |= 1; \
  \
-        ppu->attr1_shift >>= 1; \
-        ppu->attr1_shift |= ppu->attr_latch1<<15; \
+        ppu->attr1_shift <<= 1; \
+        ppu->attr1_shift |= ppu->attr_latch1; \
  \
-        ppu->attr2_shift >>= 1; \
-        ppu->attr2_shift |= ppu->attr_latch2<<15; \
+        ppu->attr2_shift <<= 1; \
+        ppu->attr2_shift |= ppu->attr_latch2; \
     }
 
 #define MN_PPU_BG_GET_PIXEL() \
@@ -200,8 +200,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         register unsigned char color; \
         register unsigned char palette; \
  \
-        color = ((ppu->low_shift>>ppu->x)&1)|(((ppu->high_shift>> \
-                 ppu->x)&1)<<1); \
+        color = ((ppu->low_shift>>(ppu->x+8))&1)|(((ppu->high_shift>> \
+                 (ppu->x+8))&1)<<1); \
  \
         /* Use the universal background color if color == 0 */ \
         if(!color) palette = 0; \
@@ -313,7 +313,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 
                 if(ppu->cycle >= 1 && ppu->cycle <= 256){
 
-#if 1
+#if 0
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
 #endif
@@ -321,8 +321,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     pixel = sprite_pixel;
 
                     /* Select the right pixel and output it */
-#if 1
-                    if(((sprite_pixel&(1<<4)) && bg_pixel) || !sprite_pixel){
+#if 0
+                    if(((sprite_pixel&(1<<4)) && (bg_pixel&2)) ||
+                       !(sprite_pixel&2)){
                         pixel = bg_pixel;
                     }
 #endif
@@ -439,7 +440,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         /* If secondary OAM is full, read instead (useless, so it isn't
          * emulated) */ \
         if(ppu->secondary_oam_pos < 32){ \
-            ppu->secondary_oam[ppu->secondary_oam_pos++] = b; \
+            ppu->secondary_oam[ppu->secondary_oam_pos] = b; \
         } \
     }
 
@@ -540,16 +541,34 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     register unsigned char read = 0;
     unsigned char sprite_pixel = 0;
     unsigned char i;
+    unsigned char inc = 0;
+
+    if(ppu->cycle == 0){
+#if 0
+        unsigned char i, n;
+        puts("Secondary OAM dump:");
+        for(i=0;i<32;i+=4){
+            for(n=0;n<4;n++){
+                printf("%02x ", ppu->secondary_oam[i+n]);
+            }
+            puts("");
+        }
+#endif
+    }
 
     if(ppu->cycle >= 1 && ppu->cycle <= 64){
         ppu->secondary_oam[(ppu->cycle-1)>>1] = 0xFF;
     }else if(ppu->cycle <= 256){
         if(ppu->cycle == 65){
-            /* TODO: Use OAMADDR for sprite evaluation */
+            /* TODO: Use OAMADDR for all primary oam accesses when performing
+             * sprite evaluation instead of n and m */
             ppu->n = 0;
             ppu->m = 0;
             ppu->secondary_oam_pos = 0;
             ppu->step = 0;
+#if 0
+            puts("SPRITE EVALUATION");
+#endif
         }
         if(ppu->cycle&1){
             /* Data is read from primary OAM */
@@ -557,68 +576,98 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
         }else{
             /* Data is written to secondary OAM */
 
-            switch(ppu->step){
-                case 0:
-                    /* Step 1 */
-                    if(!ppu->m){
-                        ppu->y = ppu->b;
-                        ppu->m++;
-                        puts("byte 0");
-                    }else if(MN_PPU_OAM_IN_RANGE(ppu->y)){
-                        /* The Y coordinate is in range, so we copy the other
-                         * bytes */
-                        if(ppu->m == 3) ppu->step++;
-                        ppu->m++;
-                        /* FIXME */
-                        puts("copy");
+            if(ppu->step == 0){
+                /* Step 1 */
+                if(!ppu->m){
+                    ppu->y = ppu->b;
+                    if(MN_PPU_OAM_IN_RANGE(ppu->y)){
+                        inc = 1;
+#if 0
+                        printf("%u %u %u %u: Y in range\n", ppu->step+1,
+                               ppu->secondary_oam_pos, ppu->n, ppu->m);
+#endif
+                    }else{
+                        ppu->step++;
+#if 0
+                        printf("%u %u %u %u: Y not in range\n", ppu->step+1,
+                               ppu->secondary_oam_pos, ppu->n, ppu->m);
+#endif
                     }
-                    break;
-                case 1:
+                }else if(MN_PPU_OAM_IN_RANGE(ppu->y)){
+                    /* The Y coordinate is in range, so we copy the other
+                     * bytes */
+#if 0
+                    printf("%u %u %u %u: Sprite copy\n", ppu->step+1,
+                           ppu->secondary_oam_pos, ppu->n, ppu->m);
+#endif
+                    if(ppu->m == 3) ppu->step++;
+                    inc = 1;
+                }
+                ppu->m++;
+            }
+            if(ppu->step == 1){
                     /* Step 2 */
                     ppu->n++;
                     if(!ppu->n){
                         /* n has overflowed back to 0, all sprites got
                          * evaluated */
+#if 0
+                        printf("%u %u %u %u: All sprites got evaluated\n",
+                               ppu->step+1, ppu->secondary_oam_pos, ppu->n,
+                               ppu->m);
+#endif
                         ppu->step = 3;
-                        break;
-                    }
-                    if(ppu->secondary_oam_pos >= 32){
-                        /* 8 sprites have been found */
-                        ppu->m = 0;
-                        ppu->entries_read = 0;
-                        ppu->step++;
                     }else{
-                        ppu->m = 0;
-                        ppu->step = 0;
-                    }
-                    break;
-                case 2:
-                    /* Step 3 */
-                    if(MN_PPU_OAM_IN_RANGE(ppu->b)){
-                        ppu->sprite_overflow = 1;
-                        ppu->entries_read = 0;
-                        read = 1;
-                    }else{
-                        ppu->n++;
-                        ppu->m++;
-                        if(!ppu->n){
+                        if(ppu->secondary_oam_pos >= 32){
+                            /* 8 sprites have been found */
                             ppu->m = 0;
+                            ppu->entries_read = 0;
                             ppu->step++;
+#if 0
+                            printf("%u %u %u %u: Secondary oam is full\n",
+                                   ppu->step+1, ppu->secondary_oam_pos, ppu->n,
+                                   ppu->m);
+#endif
+                        }else{
+                            ppu->m = 0;
+                            ppu->step = 0;
+#if 0
+                            printf("%u %u %u %u: Continue\n",
+                                   ppu->step+1, ppu->secondary_oam_pos, ppu->n,
+                                   ppu->m);
+#endif
                         }
                     }
-                    if(ppu->entries_read || read){
-                        ppu->m++;
-                        if(!ppu->m) ppu->n++;
-                        ppu->entries_read++;
+            }
+            if(ppu->step == 2){
+                /* Step 3 */
+                if(MN_PPU_OAM_IN_RANGE(ppu->b)){
+                    ppu->sprite_overflow = 1;
+                    ppu->entries_read = 0;
+                    read = 1;
+                }else{
+                    ppu->n++;
+                    ppu->m++;
+                    if(!ppu->n){
+                        ppu->m = 0;
+                        ppu->step++;
                     }
-                    break;
-                case 3:
-                    /* Step 4 */
-                    /* Fail to write OAM[n][0] */
-                    break;
+                }
+                if(ppu->entries_read || read){
+                    ppu->m++;
+                    if(!ppu->m) ppu->n++;
+                    ppu->entries_read++;
+                }
+            }
+            if(ppu->step == 3){
+                /* Step 4 */
+                /* Fail to write OAM[n][0] */
             }
 
             MN_PPU_OAM_WRITE(ppu->b);
+            if(inc && ppu->secondary_oam_pos < 32){
+                ppu->secondary_oam_pos++;
+            }
         }
     }else if(ppu->cycle <= 320){
         /* Sprite fetches */
@@ -636,14 +685,14 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                 ppu->sprite_fifo[i].down_counter--;
             }else{
                 /* Get a sprite pixel */
-                sprite_pixel = (ppu->sprite_fifo[i].low_bp&1)|
-                               (ppu->sprite_fifo[i].high_bp&1)>>1|
+                sprite_pixel = (ppu->sprite_fifo[i].low_bp>>7)|
+                               (ppu->sprite_fifo[i].high_bp>>7)>>1|
                                ppu->sprite_fifo[i].palette<<2|
                                ppu->sprite_fifo[i].priority<<4;
 
                 /* Shift the shift registers */
-                ppu->sprite_fifo[i].low_bp >>= 1;
-                ppu->sprite_fifo[i].high_bp >>= 1;
+                ppu->sprite_fifo[i].low_bp <<= 1;
+                ppu->sprite_fifo[i].high_bp <<= 1;
             }
         }
     }
