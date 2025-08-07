@@ -258,8 +258,6 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 
     unsigned char pixel;
 
-    unsigned short int old_v = ppu->v;
-
     if(ppu->scanline == 261 && ppu->cycle == 340 && !ppu->even_frame &&
        (ppu->mask&MN_PPU_MASK_RENDER)){
         /* Skip the last cycle of the pre-render scanline on an odd frames */
@@ -353,10 +351,6 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             ppu->keep_vblank_clear = 0;
         }
         /* Vertical blanking lines */
-    }
-
-    if((old_v&(((1<<5)-1)<<5)) != (ppu->v&(((1<<5)-1)<<5))){
-        printf("coarse Y change: %u %u\n", ppu->scanline, ppu->cycle);
     }
 
     if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank) cpu->nmi_pin = 0;
