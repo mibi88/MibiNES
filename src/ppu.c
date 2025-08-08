@@ -257,7 +257,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         } \
     }
 
-#define MN_PPU_BG_Y_BITS ((((1<<4)-1)<<11)|((1<<5)-1)<<5)
+#define MN_PPU_BG_Y_BITS (MN_PPU_BIT_RANGE(11, 4)|MN_PPU_BIT_RANGE(5, 5))
 #define MN_PPU_BG_X_BITS (((1<<5)-1)|(1<<10))
 
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu);
@@ -317,7 +317,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     /* The PPU repeatedly copies these bits in these cycles of
                      * the pre-render scanline. */
                     ppu->v &= ~MN_PPU_BG_Y_BITS;
-                    ppu->v |= cpu->t&MN_PPU_BG_Y_BITS;
+                    ppu->v |= ppu->t&MN_PPU_BG_Y_BITS;
                 }
             }else{
                 sprite_pixel = mn_ppu_sprites(ppu, emu);
@@ -392,9 +392,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     }else if(ppu->cycle >= 1 && ppu->cycle <= 256){
         MN_PPU_BG_FETCH(ppu->cycle-1);
     }
-
-    /*printf("v: %06b%08b t: %06b%08b\n", ppu->v>>8, ppu->v&0xFF, ppu->t>>8,
-           ppu->t&0xFF);*/
 
     if(ppu->cycle >= 337 && ppu->cycle <= 340){
         /* Dummy nametable fetches */
@@ -721,6 +718,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
             }
         }
     }
+
     return sprite_pixel;
 }
 
@@ -808,13 +806,13 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
             if(ppu->since_start < ppu->startup_time) break;
             if(ppu->w){
                 /* 2nd write */
-                ppu->t &= ~((7<<12)|(((1<<5)-1)<<5));
+                ppu->t &= ~(MN_PPU_BIT_RANGE(12, 3)|MN_PPU_BIT_RANGE(5, 5));
                 ppu->t |= (value&7)<<12;
-                ppu->t |= (value&((1<<5)-1))<<5;
+                ppu->t |= ((value>>3)&MN_PPU_BITS(5))<<5;
                 ppu->w = 0;
             }else{
-                ppu->t &= ~7;
-                ppu->t |= value>>3;
+                ppu->t &= ~MN_PPU_BITS(5);
+                ppu->t |= (value&MN_PPU_BITS(5))>>3;
                 ppu->x = value;
                 ppu->w = 1;
             }
