@@ -58,29 +58,44 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     return 0;
 }
 
+#define MN_PPU_BIT_RANGE(start, count) (((1<<(count))-1)<<(start))
+#define MN_PPU_BITS(count) ((1<<(count))-1)
+
+#define MN_PPU_BG_COARSE_X MN_PPU_BITS(5)
+#define MN_PPU_BG_COARSE_Y MN_PPU_BIT_RANGE(5, 5)
+#define MN_PPU_BG_FINE_Y   MN_PPU_BIT_RANGE(12, 3)
+#define MN_PPU_BG_NAM_X    0x400
+#define MN_PPU_BG_NAM_Y    0x800
+
 #define MN_PPU_BG_COARSE_X_INC() \
     { \
-        register unsigned char x = ((ppu->v&((1<<5)-1))+1); \
-        ppu->v = ppu->v&~((1<<5)-1); \
-        ppu->v |= x&((1<<5)-1); \
-        /* Switch nametable */ \
-        if(x&(1<<5)) ppu->v ^= 0x400; \
+        register unsigned char x = ((ppu->v&MN_PPU_BITS(5))+1); \
+        ppu->v &= ~MN_PPU_BG_COARSE_X; \
+        ppu->v |= x&MN_PPU_BG_COARSE_X; \
+        /* Switch nametable on overflow */ \
+        if(x&(1<<5)) ppu->v ^= MN_PPU_BG_NAM_X; \
     }
 
-#if 0
+#if 1
 #define MN_PPU_BG_Y_INC() \
     { \
         /* See https://www.nesdev.org/wiki/PPU_scrolling#Y_increment */ \
-        if((ppu->v&(7<<12)) != (7<<12)){ \
+        if((ppu->v&MN_PPU_BG_FINE_Y) != MN_PPU_BG_FINE_Y){ \
+            /* Increment fine Y */ \
             ppu->v += (1<<12); \
         }else{ \
-            ppu->v &= ~(7<<12); \
-            if((ppu->v&(31<<5)) == (29<<5)){ \
-                ppu->v &= ~(31<<5); \
-                ppu->v ^= 0x800; \
+            /* Reset fine Y */ \
+            ppu->v &= ~MN_PPU_BG_FINE_Y; \
+            if((ppu->v&MN_PPU_BG_COARSE_Y) == (29<<5)){ \
+                /* Reset coarse Y and switch nametable if the bottom of the
+                 * nametable is reached. */ \
+                ppu->v &= ~MN_PPU_BG_COARSE_Y; \
+                ppu->v ^= MN_PPU_BG_NAM_Y; \
             }else if((ppu->v&(31<<5)) == (31<<5)){ \
-                ppu->v &= ~(31<<5); \
+                /* Reset coarse Y on overflow but do not switch nametable */ \
+                ppu->v &= ~MN_PPU_BG_COARSE_Y; \
             }else{ \
+                /* Increase coarse Y */ \
                 ppu->v += 1<<5; \
             } \
         } \
@@ -113,8 +128,10 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 
 #define MN_PPU_BG_FILL_SHIFT_REGS() \
     { \
-        /* The bitplanes go into the high 8-bit of two 16-bit shift
-         * registers. */ \
+        /* The NesDev wiki says that the bitplanes go into the upper 8 bits of
+         * the shift registers, but the diagram on the same page of the wiki
+         * and people on the NesDev Discord say that the shift registers shift
+         * left, so we load the bits in the lower 8 bits. */ \
         ppu->low_shift &= ~0xFF; \
         ppu->high_shift &= ~0xFF; \
         ppu->low_shift |= ppu->low_bp; \
@@ -216,7 +233,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 #define MN_PPU_DRAW_PIXEL(pixel) \
     { \
         idx = emu->mapper.vram_read(emu, &emu->mapper, \
-                                    0x3F00+((pixel)>>2)*4+((pixel)&3)); \
+                                    0x3F00+(((pixel)>>2)&3)*4+((pixel)&3)); \
         /* The two upper bytes are not stored */ \
         idx &= 0x3F; \
  \
@@ -239,6 +256,9 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             } \
         } \
     }
+
+#define MN_PPU_BG_Y_BITS ((((1<<4)-1)<<11)|((1<<5)-1)<<5)
+#define MN_PPU_BG_X_BITS (((1<<5)-1)|(1<<10))
 
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu);
 unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu);
@@ -270,18 +290,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             ppu->oamaddr = 0;
         }
 
-        if(ppu->cycle == 1){
-#if 0
-            printf("l: %08b%08b h: %08b%08b v: %07b%08b\n", ppu->low_shift>>8,
-                   ppu->low_shift&0xFF, ppu->high_shift>>8,
-                   ppu->high_shift&0xFF, (ppu->v>>8)&0x7F, ppu->v&0xFF);
-#endif
-        }
-
         if(ppu->mask&MN_PPU_MASK_RENDER){
-            /*printf("sv: %07b%08b %u %u\n", (ppu->t>>8)&((1<<8)-1),
-                     ppu->t&0xFF, ppu->cycle, ppu->scanline);*/
-
             /* Visible scanlines or pre-render scanline */
 
             bg_pixel = mn_ppu_bg(ppu, emu);
@@ -289,8 +298,8 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             if(ppu->cycle == 257){
                 /* Copy some bits of t to v */
 
-                ppu->v &= ~(((1<<5)-1)|(1<<10));
-                ppu->v |= ppu->t&(((1<<5)-1)|(1<<10));
+                ppu->v &= ~MN_PPU_BG_X_BITS;
+                ppu->v |= ppu->t&MN_PPU_BG_X_BITS;
             }
 
             if(ppu->scanline == 261){
@@ -307,28 +316,28 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                 if(ppu->cycle >= 280 && ppu->cycle <= 304){
                     /* The PPU repeatedly copies these bits in these cycles of
                      * the pre-render scanline. */
-                    ppu->v &= ~((((1<<4)-1)<<11)|((1<<5)-1)<<5);
-                    ppu->v |= cpu->t&((((1<<4)-1)<<11)|((1<<5)-1)<<5);
+                    ppu->v &= ~MN_PPU_BG_Y_BITS;
+                    ppu->v |= cpu->t&MN_PPU_BG_Y_BITS;
                 }
             }else{
                 sprite_pixel = mn_ppu_sprites(ppu, emu);
 
                 if(ppu->cycle >= 1 && ppu->cycle <= 256){
 
-#if 1
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
-#endif
 
                     pixel = sprite_pixel;
 
                     /* Select the right pixel and output it */
-#if 1
+                    if((bg_pixel&3) && (sprite_pixel&3) &&
+                       ((sprite_pixel)&(1<<5)) && ppu->cycle != 256){
+                        ppu->sprite0_hit = 1;
+                    }
                     if(((sprite_pixel&(1<<4)) && (bg_pixel&3)) ||
                        !(sprite_pixel&3)){
                         pixel = bg_pixel;
                     }
-#endif
                     MN_PPU_DRAW_PIXEL(pixel);
                 }
             }
@@ -353,7 +362,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
         /* Vertical blanking lines */
     }
 
-    if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank) cpu->nmi_pin = 0;
+    if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank && cpu->nmi_pin){
+        cpu->nmi_pin = 0;
+    }
 
     MN_PPU_INC_CYCLE();
 
@@ -701,6 +712,8 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                                (ppu->sprite_fifo[i].high_bp>>7)>>1|
                                ppu->sprite_fifo[i].palette<<2|
                                ppu->sprite_fifo[i].priority<<4;
+
+                if(!i) sprite_pixel |= 1<<5;
 
                 /* Shift the shift registers */
                 ppu->sprite_fifo[i].low_bp <<= 1;
