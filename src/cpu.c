@@ -121,13 +121,34 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
 
 #define MN_CPU_ADC(value) \
     { \
-        tmp = cpu->a; \
+        register unsigned char a; \
+ \
+        a = cpu->a; \
         cpu->a = (result = cpu->a+(value)+(cpu->p&MN_CPU_C)); \
  \
         if(result&(~0xFF)) cpu->p |= MN_CPU_C; \
         else cpu->p &= ~MN_CPU_C; \
  \
-        if((result^tmp)&(result^(value))&(1<<7)){ \
+        if((result^a)&(result^(value))&(1<<7)){ \
+            cpu->p |= MN_CPU_V; \
+        }else{ \
+            cpu->p &= ~MN_CPU_V; \
+        } \
+ \
+        MN_CPU_UPDATE_NZ(cpu->a); \
+    }
+
+#define MN_CPU_SBC(value) \
+    { \
+        register unsigned char a; \
+ \
+        a = cpu->a; \
+        cpu->a = (result = cpu->a-(value)-((cpu->p&MN_CPU_C)^1)); \
+ \
+        if(!(result&(~0xFF))) cpu->p |= MN_CPU_C; \
+        else cpu->p &= ~MN_CPU_C; \
+ \
+        if((result^a)&(result^(~value))&(1<<7)){ \
             cpu->p |= MN_CPU_V; \
         }else{ \
             cpu->p &= ~MN_CPU_V; \
@@ -152,7 +173,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         tmp = cpu->p&MN_CPU_C; \
         cpu->p &= ~MN_CPU_C; \
         /* Set the carry flag to the old bit 7 */ \
-        cpu->p |= (cpu->a>>7)&1; \
+        cpu->p |= (var>>7)&1; \
  \
         var <<= 1; \
         var |= tmp; \
@@ -164,7 +185,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
     { \
         cpu->p &= ~MN_CPU_C; \
         /* Set the carry flag to the old bit 0 */ \
-        cpu->p |= cpu->a&1; \
+        cpu->p |= var&1; \
  \
         var >>= 1; \
  \
@@ -176,7 +197,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         tmp = (cpu->p&MN_CPU_C)<<7; \
         cpu->p &= ~MN_CPU_C; \
         /* Set the carry flag to the old bit 0 */ \
-        cpu->p |= cpu->a&1; \
+        cpu->p |= var&1; \
  \
         var >>= 1; \
         var |= tmp; \
@@ -454,7 +475,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
     { \
         switch(cpu->cycle){ \
             case 1: \
-                cpu->target_cycle = 4; \
+                cpu->target_cycle = 7; \
                 break; \
             case 2: \
                 cpu->pc++; \
@@ -584,7 +605,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
     { \
         switch(cpu->cycle){ \
             case 1: \
-                cpu->target_cycle = 6; \
+                cpu->target_cycle = 8; \
                 break; \
             case 2: \
                 cpu->pc++; \
@@ -703,6 +724,20 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         } \
     }
 
+#define MN_CPU_OP_INFO() \
+    { \
+        printf("%c%c%c%c%c1%c%c (p: %02x) op: %02x pc: %04x a: %02x x: %02x " \
+               "y: %02x s: %02x\n", \
+               cpu->p&MN_CPU_C ? 'C' : '-', \
+               cpu->p&MN_CPU_Z ? 'Z' : '-', \
+               cpu->p&MN_CPU_I ? 'I' : '-', \
+               cpu->p&MN_CPU_D ? 'D' : '-', \
+               cpu->p&MN_CPU_B ? 'B' : '-', \
+               cpu->p&MN_CPU_V ? 'V' : '-', \
+               cpu->p&MN_CPU_N ? 'N' : '-', cpu->p|(1<<5), cpu->opcode, \
+               cpu->pc, cpu->a, cpu->x, cpu->y, cpu->s); \
+    }
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -734,16 +769,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
         cpu->opcode = MN_CPU_READ(cpu->pc);
 OPCODE_LOADED:
 #if MN_CPU_DEBUG && !MN_CPU_CYCLE_DETAIL
-        printf("%c%c%c%c%c-%c%c op: %02x pc: %04x a: %02x x: %02x "
-               "y: %02x\n",
-               cpu->p&MN_CPU_C ? 'C' : '-',
-               cpu->p&MN_CPU_Z ? 'Z' : '-',
-               cpu->p&MN_CPU_I ? 'I' : '-',
-               cpu->p&MN_CPU_D ? 'D' : '-',
-               cpu->p&MN_CPU_B ? 'B' : '-',
-               cpu->p&MN_CPU_N ? 'N' : '-',
-               cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc, cpu->a,
-               cpu->x, cpu->y);
+        MN_CPU_OP_INFO();
 #endif
         cpu->cycle = 1;
         cpu->target_cycle = 2;
@@ -911,7 +937,7 @@ OPCODE_LOADED:
                     cpu->target_cycle = 3;
                     break;
                 case 3:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->p);
+                    MN_CPU_WRITE(0x0100+cpu->s, cpu->p|(1<<5)|MN_CPU_B);
                     cpu->s--;
                     break;
             }
@@ -928,6 +954,8 @@ OPCODE_LOADED:
                     break;
                 case 4:
                     cpu->a = MN_CPU_READ(0x0100+cpu->s);
+
+                    MN_CPU_UPDATE_NZ(cpu->a);
                     break;
             }
             break;
@@ -942,7 +970,7 @@ OPCODE_LOADED:
                     cpu->s++;
                     break;
                 case 4:
-                    cpu->p = MN_CPU_READ(0x0100+cpu->s);
+                    cpu->p = MN_CPU_READ(0x0100+cpu->s)&~MN_CPU_B;
                     break;
             }
             break;
@@ -1111,7 +1139,7 @@ OPCODE_LOADED:
         case 0xCA:
             /* DEX */
             MN_CPU_IMP({
-                cpu->x++;
+                cpu->x--;
 
                 MN_CPU_UPDATE_NZ(cpu->x);
             });
@@ -1237,7 +1265,7 @@ OPCODE_LOADED:
         case 0xE9:
             /* SBC */
             MN_CPU_IMM({
-                MN_CPU_ADC(~cpu->t);
+                MN_CPU_SBC(cpu->t);
             });
             break;
 
@@ -1353,7 +1381,7 @@ OPCODE_LOADED:
         case 0xED:
             /* SBC */
             MN_CPU_ABS_READ({
-                MN_CPU_ADC(~tmp);
+                MN_CPU_SBC(tmp);
                 break;
             });
             break;
@@ -1525,7 +1553,7 @@ OPCODE_LOADED:
         case 0xE5:
             /* SBC */
             MN_CPU_ZP_READ({
-                MN_CPU_ADC(~tmp);
+                MN_CPU_SBC(tmp);
             });
             break;
 
@@ -1668,7 +1696,7 @@ OPCODE_LOADED:
         case 0xF5:
             /* SBC */
             MN_CPU_ZPI_READ(cpu->x, {
-                MN_CPU_ADC(~tmp);
+                MN_CPU_SBC(tmp);
             });
             break;
 
@@ -1835,7 +1863,7 @@ OPCODE_LOADED:
         case 0xFD:
             /* SBC */
             MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                MN_CPU_ADC(~tmp);
+                MN_CPU_SBC(tmp);
             });
             break;
 
@@ -1843,7 +1871,7 @@ OPCODE_LOADED:
 
         case 0xBE:
             /* LDX */
-            MN_CPU_ABSI_READ(cpu->x, {
+            MN_CPU_ABSI_READ(cpu->y, {
                 cpu->x = tmp;
 
                 MN_CPU_UPDATE_NZ(cpu->x);
@@ -2007,7 +2035,7 @@ OPCODE_LOADED:
         case 0xE1:
             /* SBC */
             MN_CPU_IDXIND_READ({
-                MN_CPU_ADC(~tmp);
+                MN_CPU_SBC(tmp);
             });
             break;
 
@@ -2077,7 +2105,7 @@ OPCODE_LOADED:
         case 0xF1:
             /* SBC */
             MN_CPU_INDIDX_READ({
-                MN_CPU_ADC(~tmp);
+                MN_CPU_SBC(tmp);
             });
             break;
 
@@ -2251,16 +2279,8 @@ OPCODE_LOADED:
     }
 
 #if MN_CPU_DEBUG && MN_CPU_CYCLE_DETAIL
-    printf("c: %d, %c%c%c%c%c-%c%c op: %02x pc: %04x a: %02x x: %02x "
-           "y: %02x\n", cpu->cycle,
-           cpu->p&MN_CPU_C ? 'C' : '-',
-           cpu->p&MN_CPU_Z ? 'Z' : '-',
-           cpu->p&MN_CPU_I ? 'I' : '-',
-           cpu->p&MN_CPU_D ? 'D' : '-',
-           cpu->p&MN_CPU_B ? 'B' : '-',
-           cpu->p&MN_CPU_N ? 'N' : '-',
-           cpu->p&MN_CPU_V ? 'V' : '-', cpu->opcode, cpu->pc, cpu->a, cpu->x,
-           cpu->y);
+    printf("c: %d ", cpu->cycle);
+    MN_CPU_OP_INFO();
 #endif
 
     if((cpu->opcode&31) != 16 && cpu->opcode &&
