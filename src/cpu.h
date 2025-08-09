@@ -35,7 +35,7 @@
 #ifndef MN_CPU_H
 #define MN_CPU_H
 
-#define MN_CPU_DEBUG 1
+#define MN_CPU_DEBUG 0
 #define MN_CPU_CYCLE_DETAIL 0
 #define MN_CPU_REPORT_POLLING 0
 

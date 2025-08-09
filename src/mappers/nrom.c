@@ -225,6 +225,8 @@ static void mn_nrom_vram_write(void *_emu, void *_mapper,
         }
     }else if(addr >= 0x3F00){
         rom->vram[0x800+(addr&0x1F)] = value;
+    }else if(rom->chr_ram && addr < 0x2000){
+        rom->chr[addr] = value;
     }
 }
 

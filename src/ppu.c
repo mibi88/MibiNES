@@ -46,7 +46,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     ppu->cycles_since_cpu_cycle = 0;
 
     ppu->since_start = 0;
-    ppu->startup_time = 29658;
+    ppu->startup_time = 0/*29658*/;
 
     ppu->cycle = 0;
     ppu->scanline = 261;
@@ -233,7 +233,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 #define MN_PPU_DRAW_PIXEL(pixel) \
     { \
         idx = emu->mapper.vram_read(emu, &emu->mapper, \
-                                    0x3F00+(((pixel)>>2)&3)*4+((pixel)&3)); \
+                                    0x3F00+((pixel)>>2)*4+((pixel)&3)); \
         /* The two upper bytes are not stored */ \
         idx &= 0x3F; \
  \
@@ -278,6 +278,15 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 
     unsigned char pixel;
 
+    if(ppu->scanline == 261 && ppu->cycle == 1){
+        /* XXX: Is this accurate? */
+        cpu->nmi_pin = 1;
+        /* Clear flags */
+        ppu->vblank = 0;
+        ppu->sprite0_hit = 0;
+        ppu->sprite_overflow = 0;
+    }
+
     if(ppu->scanline == 261 && ppu->cycle == 340 && !ppu->even_frame &&
        (ppu->mask&MN_PPU_MASK_RENDER)){
         /* Skip the last cycle of the pre-render scanline on an odd frames */
@@ -305,14 +314,6 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
             if(ppu->scanline == 261){
                 /* Pre-render scanline only code */
 
-                if(ppu->cycle == 1){
-                    /* Clear flags */
-                    ppu->vblank = 0;
-                    ppu->sprite0_hit = 0;
-                    ppu->sprite_overflow = 0;
-                    cpu->nmi_pin = 1;
-                }
-
                 if(ppu->cycle >= 280 && ppu->cycle <= 304){
                     /* The PPU repeatedly copies these bits in these cycles of
                      * the pre-render scanline. */
@@ -327,7 +328,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
 
-                    pixel = sprite_pixel;
+                    pixel = (sprite_pixel&MN_PPU_BITS(4))+(3<<2);
 
                     /* Select the right pixel and output it */
                     if((bg_pixel&3) && (sprite_pixel&3) &&
@@ -362,7 +363,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
         /* Vertical blanking lines */
     }
 
-    if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank && cpu->nmi_pin){
+    if(ppu->ctrl&MN_PPU_CTRL_NMI && ppu->vblank){
         cpu->nmi_pin = 0;
     }
 
@@ -414,10 +415,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         if(ppu->scanline != 261){
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
-
-            /*printf("%08b%08b %08b%08b\n", ppu->low_shift>>8,
-                     ppu->low_shift&0xFF, ppu->high_shift>>8,
-                     ppu->high_shift&0xFF);*/
         }
         if(ppu->cycle >= 2){
             /* Shift registers shift for the first time at cycle 2 */
