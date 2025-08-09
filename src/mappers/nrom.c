@@ -206,6 +206,10 @@ static unsigned char mn_nrom_vram_read(void *_emu, void *_mapper,
             return rom->vram[(addr-0x2000)&0x7FF];
         }
     }else if(addr >= 0x3F00){
+        if(!(addr&3)){
+            /* Return the universal background color */
+            return rom->vram[0x800];
+        }
         return rom->vram[0x800+(addr&0x1F)];
     }
 

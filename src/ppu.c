@@ -257,8 +257,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         } \
     }
 
-#define MN_PPU_BG_Y_BITS (MN_PPU_BIT_RANGE(11, 4)|MN_PPU_BIT_RANGE(5, 5))
-#define MN_PPU_BG_X_BITS (((1<<5)-1)|(1<<10))
+#define MN_PPU_BG_Y_BITS (MN_PPU_BG_FINE_Y|MN_PPU_BG_NAM_Y|MN_PPU_BG_COARSE_Y)
+#define MN_PPU_BG_X_BITS (MN_PPU_BG_NAM_X|MN_PPU_BG_COARSE_X)
 
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu);
 unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu);
@@ -561,7 +561,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     unsigned char inc = 0;
 
     if(ppu->cycle == 0){
-#if 0
+#if MN_PPU_DEBUG_SPRITE_EVAL
         unsigned char i, n;
         puts("Secondary OAM dump:");
         for(i=0;i<32;i+=4){
@@ -580,7 +580,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
             ppu->secondary_oam_pos = 0;
             ppu->step = 0;
             ppu->sprite0_loaded = 0;
-#if 0
+#if MN_PPU_DEBUG_SPRITE_EVAL
             puts("SPRITE EVALUATION");
 #endif
         }
@@ -598,22 +598,22 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                         inc = 1;
 
                         if(!(ppu->oamaddr&~3)) ppu->sprite0_loaded = 1;
-#if 0
-                        printf("%u %u %u %u: Y in range\n", ppu->step+1,
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                        printf("%u %u %02x: Y in range\n", ppu->step+1,
                                ppu->secondary_oam_pos, ppu->oamaddr);
 #endif
                     }else{
                         ppu->step++;
-#if 0
-                        printf("%u %u %u %u: Y not in range\n", ppu->step+1,
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                        printf("%u %u %02x: Y not in range\n", ppu->step+1,
                                ppu->secondary_oam_pos, ppu->oamaddr);
 #endif
                     }
                 }else if(MN_PPU_OAM_IN_RANGE(ppu->y)){
                     /* The Y coordinate is in range, so we copy the other
                      * bytes */
-#if 0
-                    printf("%u %u %u %u: Sprite copy\n", ppu->step+1,
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                    printf("%u %u %02x: Sprite copy\n", ppu->step+1,
                            ppu->secondary_oam_pos, ppu->oamaddr);
 #endif
                     if((ppu->oamaddr&3) == 3) ppu->step++;
@@ -627,8 +627,8 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                     if(!ppu->oamaddr){
                         /* n has overflowed back to 0, all sprites got
                          * evaluated */
-#if 0
-                        printf("%u %u %u %u: All sprites got evaluated\n",
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                        printf("%u %u %02x: All sprites got evaluated\n",
                                ppu->step+1, ppu->secondary_oam_pos,
                                ppu->oamaddr);
 #endif
@@ -639,16 +639,16 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                             ppu->oamaddr &= ~3;
                             ppu->entries_read = 0;
                             ppu->step++;
-#if 0
-                            printf("%u %u %u %u: Secondary oam is full\n",
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                            printf("%u %u %02x: Secondary oam is full\n",
                                    ppu->step+1, ppu->secondary_oam_pos,
                                    ppu->oamaddr);
 #endif
                         }else{
                             ppu->oamaddr &= ~3;
                             ppu->step = 0;
-#if 0
-                            printf("%u %u %u: Continue\n",
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                            printf("%u %u %02x: Continue\n",
                                    ppu->step+1, ppu->secondary_oam_pos,
                                    ppu->oamaddr);
 #endif
