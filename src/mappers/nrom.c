@@ -228,6 +228,10 @@ static void mn_nrom_vram_write(void *_emu, void *_mapper,
             rom->vram[(addr-0x2000)&0x7FF] = value;
         }
     }else if(addr >= 0x3F00){
+        if(!(addr&3)){
+            /* Change the universal background color */
+            rom->vram[0x800] = value;
+        }
         rom->vram[0x800+(addr&0x1F)] = value;
     }else if(rom->chr_ram && addr < 0x2000){
         rom->chr[addr] = value;

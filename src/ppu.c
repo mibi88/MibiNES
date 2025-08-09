@@ -720,6 +720,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
 
 unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
     unsigned char v;
+    unsigned short int addr;
 
     switch(reg){
         case MN_PPU_CTRL:
@@ -748,8 +749,9 @@ unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
         case MN_PPU_PPUDATA:
             /* XXX: Is this correct */
             v = ppu->io_bus;
-            ppu->io_bus = emu->mapper.vram_read(emu, &emu->mapper,
-                                                ppu->v&((1<<15)-1));
+            /* The highest bit is unused for access through $2007. */
+            addr = ppu->v&MN_PPU_BIT_RANGE(0, 14);
+            ppu->io_bus = emu->mapper.vram_read(emu, &emu->mapper, addr);
             if((ppu->scanline < 240 || ppu->scanline == 261) &&
                (ppu->mask&MN_PPU_MASK_RENDER)){
                 /* The PPU is rendering */
@@ -759,10 +761,14 @@ unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
                 MN_PPU_BG_Y_INC();
                 /* XXX: Is this a "load next value" as written in the wiki? */
                 ppu->io_bus = emu->mapper.vram_read(emu, &emu->mapper,
-                                                    ppu->v&((1<<15)-1));
+                                                    ppu->v&MN_PPU_BIT_RANGE(0,
+                                                                14));
             }else{
                 ppu->v += ppu->ctrl&MN_PPU_CTRL_INC ? 32 : 1;
             }
+            /* Palette reads are unbuffered (if the PPU supports palette
+             * reads). */
+            if(addr >= 0x3F00) return ppu->io_bus;
             return v;
             break;
     }
@@ -831,7 +837,8 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
 #if 0
             printf("%04x = %02x\n", ppu->v&((1<<15)-1), value);
 #endif
-            emu->mapper.vram_write(emu, &emu->mapper, ppu->v&((1<<15)-1),
+            emu->mapper.vram_write(emu, &emu->mapper,
+                                   ppu->v&MN_PPU_BIT_RANGE(0, 14),
                                    value);
             if((ppu->scanline < 240 || ppu->scanline == 261) &&
                (ppu->mask&MN_PPU_MASK_RENDER)){
@@ -842,7 +849,8 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
                 MN_PPU_BG_Y_INC();
                 /* XXX: Is this a "load next value" as written in the wiki? */
                 ppu->io_bus = emu->mapper.vram_read(emu, &emu->mapper,
-                                                    ppu->v&((1<<15)-1));
+                                                    ppu->v&MN_PPU_BIT_RANGE(0,
+                                                            14));
             }else{
                 ppu->v += ppu->ctrl&MN_PPU_CTRL_INC ? 32 : 1;
             }
