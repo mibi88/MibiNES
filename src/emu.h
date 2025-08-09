@@ -157,6 +157,8 @@ typedef struct {
     unsigned char ctrl;
     unsigned char mask;
 
+    unsigned int sprite0_loaded : 1;
+
     unsigned char *palette;
 
     void (*draw_pixel)(long int color);
