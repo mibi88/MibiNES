@@ -157,6 +157,14 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             case 0: \
                 ppu->addr = 0x2000|(ppu->v&0x0FFF); \
                 ppu->video_mem_bus = ppu->addr; \
+ \
+                /* NOTE: Previously I was performing this on the 8th step, but
+                 * it caused the background to be shifted by 1px to the right,
+                 * but I'm not sure which one is more accurate. Is it more
+                 * accurate to perform those operations on the 8th step, i.e.,
+                 * the case for ((step)&7) == 7? */ \
+                if(!((step)&7)) MN_PPU_BG_FETCHES_DONE(); \
+ \
                 break; \
             case 1: \
                 ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
@@ -194,7 +202,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
-                MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
     }
@@ -219,13 +226,13 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         register unsigned char color; \
         register unsigned char palette; \
  \
-        color = ((ppu->low_shift>>(ppu->x+8))&1)|(((ppu->high_shift>> \
-                 (ppu->x+8))&1)<<1); \
+        color = ((ppu->low_shift>>(15-ppu->x))&1)|(((ppu->high_shift>> \
+                 (15-ppu->x))&1)<<1); \
  \
         /* Use the universal background color if color == 0 */ \
         if(!color) palette = 0; \
-        palette = ((ppu->attr1_shift>>ppu->x)&1)| \
-                  (((ppu->attr2_shift>>ppu->x)&1)<<1); \
+        palette = ((ppu->attr1_shift>>(7-ppu->x))&1)| \
+                  (((ppu->attr2_shift>>(7-ppu->x))&1)<<1); \
  \
         pixel = color|(palette<<2); \
     }
