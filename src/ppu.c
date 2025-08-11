@@ -137,9 +137,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->low_shift |= ppu->low_bp; \
         ppu->high_shift |= ppu->high_bp; \
  \
-        ppu->attr_latch1 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2); \
-        ppu->attr_latch2 = ppu->attr>>((ppu->v&1)<<1)>>(((ppu->v>>5)&1)<<2)>> \
-                           1; \
+        ppu->attr_latch1 = ppu->attr>>(((ppu->v)&2)+((ppu->v>>4)&4)); \
+        ppu->attr_latch2 = ppu->attr>>(((ppu->v)&2)+((ppu->v>>4)&4))>>1; \
     }
 
 #define MN_PPU_BG_FETCHES_DONE() \
