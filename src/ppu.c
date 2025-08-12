@@ -228,8 +228,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         color = ((ppu->low_shift>>(15-ppu->x))&1)|(((ppu->high_shift>> \
                  (15-ppu->x))&1)<<1); \
  \
-        /* Use the universal background color if color == 0 */ \
-        if(!color) palette = 0; \
         palette = ((ppu->attr1_shift>>(7-ppu->x))&1)| \
                   (((ppu->attr2_shift>>(7-ppu->x))&1)<<1); \
  \
@@ -334,7 +332,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
 
-                    pixel = (sprite_pixel&MN_PPU_BITS(4))+(3<<2);
+                    pixel = (sprite_pixel&3)|(((sprite_pixel>>2)+4)<<2);
 
                     /* Select the right pixel and output it */
                     if((bg_pixel&3) && (sprite_pixel&3) &&
@@ -502,9 +500,9 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                     ppu->secondary_oam[pos+3]; \
                 v_flip = attr>>7; \
                 ppu->addr = ((ppu->tile_id<<4)|(v_flip ? \
-                              8-(((ppu->scanline-1)-y)&7) : \
-                              (((ppu->scanline-1)-y)&7)))+ \
-                            ((ppu->scanline-1)-y > 16 ? \
+                              8-(((ppu->scanline)-y)&7) : \
+                              (((ppu->scanline)-y)&7)))+ \
+                            ((ppu->scanline)-y > 16 ? \
                              (ppu->big_sprites^v_flip)*16 : \
                              (ppu->big_sprites ? \
                               (ppu->big_sprites^v_flip^1)*16 : 0)); \
@@ -532,9 +530,9 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 attr = ppu->secondary_oam[pos+2]; \
                 v_flip = attr>>7; \
                 ppu->addr = ((ppu->tile_id<<4)|(1<<3)|(v_flip ? \
-                              8-(((ppu->scanline-1)-y)&7) : \
-                              (((ppu->scanline-1)-y)&7)))+ \
-                            ((ppu->scanline-1)-y > 16 ? \
+                              8-(((ppu->scanline)-y)&7) : \
+                              (((ppu->scanline)-y)&7)))+ \
+                            ((ppu->scanline)-y > 16 ? \
                              (ppu->big_sprites^v_flip)*16 : \
                              (ppu->big_sprites ? \
                               (ppu->big_sprites^v_flip^1)*16 : 0)); \
@@ -566,8 +564,8 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     unsigned char i;
     unsigned char inc = 0;
 
-    if(ppu->cycle == 0){
 #if MN_PPU_DEBUG_SPRITE_EVAL
+    if(/*ppu->cycle == 0 || */ppu->secondary_oam_pos >= 32){
         unsigned char i, n;
         puts("Secondary OAM dump:");
         for(i=0;i<32;i+=4){
@@ -576,8 +574,8 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
             }
             puts("");
         }
-#endif
     }
+#endif
 
     if(ppu->cycle >= 1 && ppu->cycle <= 64){
         ppu->secondary_oam[(ppu->cycle-1)>>1] = 0xFF;
@@ -603,11 +601,12 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                     if(MN_PPU_OAM_IN_RANGE(ppu->y)){
                         inc = 1;
 
-                        if(!(ppu->oamaddr&~3)) ppu->sprite0_loaded = 1;
+                        if(!ppu->oamaddr) ppu->sprite0_loaded = 1;
 #if MN_PPU_DEBUG_SPRITE_EVAL
                         printf("%u %u %02x: Y in range\n", ppu->step+1,
                                ppu->secondary_oam_pos, ppu->oamaddr);
 #endif
+                        ppu->oamaddr++;
                     }else{
                         ppu->step++;
 #if MN_PPU_DEBUG_SPRITE_EVAL
@@ -624,12 +623,15 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
 #endif
                     if((ppu->oamaddr&3) == 3) ppu->step++;
                     inc = 1;
+                    ppu->oamaddr++;
                 }
-                ppu->oamaddr++;
             }
             if(ppu->step == 1){
                     /* Step 2 */
-                    if(ppu->oamaddr&3) ppu->oamaddr += 4;
+                    if(ppu->oamaddr&3 || 1){
+                        ppu->oamaddr &= ~3;
+                        ppu->oamaddr += 4;
+                    }
                     if(!ppu->oamaddr){
                         /* n has overflowed back to 0, all sprites got
                          * evaluated */
@@ -706,7 +708,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
             }else{
                 /* Get a sprite pixel */
                 sprite_pixel = (ppu->sprite_fifo[i].low_bp>>7)|
-                               (ppu->sprite_fifo[i].high_bp>>7)>>1|
+                               (ppu->sprite_fifo[i].high_bp>>7)<<1|
                                ppu->sprite_fifo[i].palette<<2|
                                ppu->sprite_fifo[i].priority<<4;
 
