@@ -594,84 +594,54 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
         }else{
             /* Data is written to secondary OAM */
 
+            /* Step 1 */
             if(ppu->step == 0){
-                /* Step 1 */
-                if(!(ppu->oamaddr&3)){
-                    ppu->y = ppu->b;
-                    if(MN_PPU_OAM_IN_RANGE(ppu->y)){
-                        inc = 1;
-
-                        if(!ppu->oamaddr) ppu->sprite0_loaded = 1;
-#if MN_PPU_DEBUG_SPRITE_EVAL
-                        printf("%u %u %02x: Y in range\n", ppu->step+1,
-                               ppu->secondary_oam_pos, ppu->oamaddr);
-#endif
-                        ppu->oamaddr++;
-                    }else{
-                        ppu->step++;
-#if MN_PPU_DEBUG_SPRITE_EVAL
-                        printf("%u %u %02x: Y not in range\n", ppu->step+1,
-                               ppu->secondary_oam_pos, ppu->oamaddr);
-#endif
-                    }
-                }else if(MN_PPU_OAM_IN_RANGE(ppu->y)){
-                    /* The Y coordinate is in range, so we copy the other
-                     * bytes */
-#if MN_PPU_DEBUG_SPRITE_EVAL
-                    printf("%u %u %02x: Sprite copy\n", ppu->step+1,
-                           ppu->secondary_oam_pos, ppu->oamaddr);
-#endif
-                    if((ppu->oamaddr&3) == 3) ppu->step++;
+                ppu->y = ppu->b;
+                if(MN_PPU_OAM_IN_RANGE(ppu->y)){
                     inc = 1;
+
+                    if(!ppu->oamaddr) ppu->sprite0_loaded = 1;
+
+                    ppu->step++;
                     ppu->oamaddr++;
+                }else{
+                    ppu->step = 2;
+                    ppu->oamaddr += 4;
+                }
+            }else if(ppu->step == 1){
+                /* Copy the rest of sprite to secondary OAM */
+                ppu->oamaddr++;
+                inc = 1;
+                if(!(ppu->oamaddr&3)) ppu->step++;
+            }
+
+            /* Step 2 */
+            if(ppu->step == 2){
+                if(!ppu->oamaddr){
+                    /* n has overflowed back to 0, all sprites got
+                     * evaluated */
+                    ppu->step = 4;
+                }else{
+                    if(ppu->secondary_oam_pos >= 32){
+                        /* 8 sprites have been found */
+                        ppu->entries_read = 0;
+                        ppu->step++;
+                    }else{
+                        /* Continue copying sprites */
+                        ppu->step = 0;
+                    }
                 }
             }
-            if(ppu->step == 1){
-                    /* Step 2 */
-                    if(ppu->oamaddr&3 || 1){
-                        ppu->oamaddr &= ~3;
-                        ppu->oamaddr += 4;
-                    }
-                    if(!ppu->oamaddr){
-                        /* n has overflowed back to 0, all sprites got
-                         * evaluated */
-#if MN_PPU_DEBUG_SPRITE_EVAL
-                        printf("%u %u %02x: All sprites got evaluated\n",
-                               ppu->step+1, ppu->secondary_oam_pos,
-                               ppu->oamaddr);
-#endif
-                        ppu->step = 3;
-                    }else{
-                        if(ppu->secondary_oam_pos >= 32){
-                            /* 8 sprites have been found */
-                            ppu->oamaddr &= ~3;
-                            ppu->entries_read = 0;
-                            ppu->step++;
-#if MN_PPU_DEBUG_SPRITE_EVAL
-                            printf("%u %u %02x: Secondary oam is full\n",
-                                   ppu->step+1, ppu->secondary_oam_pos,
-                                   ppu->oamaddr);
-#endif
-                        }else{
-                            ppu->oamaddr &= ~3;
-                            ppu->step = 0;
-#if MN_PPU_DEBUG_SPRITE_EVAL
-                            printf("%u %u %02x: Continue\n",
-                                   ppu->step+1, ppu->secondary_oam_pos,
-                                   ppu->oamaddr);
-#endif
-                        }
-                    }
-            }
-            if(ppu->step == 2){
-                /* Step 3 */
+
+            /* Step 3 */
+            if(ppu->step == 3){
                 if(MN_PPU_OAM_IN_RANGE(ppu->b)){
                     ppu->sprite_overflow = 1;
                     ppu->entries_read = 0;
                     read = 1;
                 }else{
                     ppu->oamaddr += 5;
-                    if(!ppu->oamaddr){
+                    if(!(ppu->oamaddr&~3)){
                         ppu->oamaddr &= ~3;
                         ppu->step++;
                     }
@@ -681,8 +651,9 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                     ppu->entries_read++;
                 }
             }
-            if(ppu->step == 3){
-                /* Step 4 */
+
+            /* Step 4 */
+            if(ppu->step == 4){
                 /* Fail to write OAM[n][0] */
             }
 

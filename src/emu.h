@@ -137,7 +137,7 @@ typedef struct {
 
     unsigned int big_sprites : 1;
 
-    unsigned int step : 2;
+    unsigned char step;
 
     /* Pixel output is delayed 4 cycles further. */
     unsigned char pixel_out[4];
