@@ -565,7 +565,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     unsigned char inc = 0;
 
 #if MN_PPU_DEBUG_SPRITE_EVAL
-    if(/*ppu->cycle == 0 || */ppu->secondary_oam_pos >= 32){
+    if(ppu->cycle == 0){
         unsigned char i, n;
         puts("Secondary OAM dump:");
         for(i=0;i<32;i+=4){
@@ -604,15 +604,27 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
 
                     ppu->step++;
                     ppu->oamaddr++;
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                    printf("%03u %03u %u %02x: Sprite in range\n",
+                           ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
+#endif
                 }else{
                     ppu->step = 2;
                     ppu->oamaddr += 4;
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                    printf("%03u %03u %u %02x: Skipping sprite\n",
+                           ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
+#endif
                 }
             }else if(ppu->step == 1){
                 /* Copy the rest of sprite to secondary OAM */
                 ppu->oamaddr++;
                 inc = 1;
                 if(!(ppu->oamaddr&3)) ppu->step++;
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                printf("%03u %03u %u %02x: Sprite copy\n", ppu->scanline,
+                       ppu->y, ppu->step, ppu->oamaddr);
+#endif
             }
 
             /* Step 2 */
@@ -621,15 +633,27 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                     /* n has overflowed back to 0, all sprites got
                      * evaluated */
                     ppu->step = 4;
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                    printf("%03u %03u %u %02x: All sprites got evaluated\n",
+                           ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
+#endif
                 }else{
                     if(ppu->secondary_oam_pos >= 32){
                         /* 8 sprites have been found */
                         ppu->entries_read = 0;
                         ppu->step++;
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                        printf("%03u %03u %u %02x: 8 sprites found!\n",
+                               ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
+#endif
                     }else{
                         /* Continue copying sprites */
                         ppu->step = 0;
                     }
+#if MN_PPU_DEBUG_SPRITE_EVAL
+                    printf("%03u %03u %u %02x: Continue\n", ppu->scanline,
+                           ppu->y, ppu->step, ppu->oamaddr);
+#endif
                 }
             }
 
