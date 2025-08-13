@@ -332,7 +332,7 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
 
-                    pixel = (sprite_pixel&3)|(((sprite_pixel>>2)+4)<<2);
+                    pixel = (sprite_pixel&3)|((((sprite_pixel>>2)&3)+4)<<2);
 
                     /* Select the right pixel and output it */
                     if((bg_pixel&3) && (sprite_pixel&3) &&
@@ -496,7 +496,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 ppu->tile_id = ppu->secondary_oam[pos+1]; \
                 if(ppu->big_sprites) ppu->tile_id <<= 1; \
                 attr = ppu->secondary_oam[pos+2]; \
-                ppu->sprite_fifo[(step)>>3].palette = attr&2; \
+                ppu->sprite_fifo[(step)>>3].palette = attr&3; \
                 ppu->sprite_fifo[(step)>>3].priority = attr>>5; \
                 ppu->sprite_fifo[(step)>>3].down_counter = \
                     ppu->secondary_oam[pos+3]; \
