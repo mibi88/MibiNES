@@ -459,6 +459,8 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
 #define MN_PPU_OAM_IN_RANGE(y) ((y) <= ppu->scanline && \
                             (y)+(ppu->big_sprites ? 16 : 8) > ppu->scanline)
 
+#define MN_PPU_OAM_BP_LINE() (((ppu->scanline-y)&7)^(v_flip*7))
+
 #define MN_PPU_OAM_FETCH(step) \
     { \
         register unsigned char v_flip, h_flip; \
@@ -499,15 +501,18 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 ppu->sprite_fifo[(step)>>3].down_counter = \
                     ppu->secondary_oam[pos+3]; \
                 v_flip = attr>>7; \
-                ppu->addr = ((ppu->tile_id<<4)|(v_flip ? \
-                              8-(((ppu->scanline)-y)&7) : \
-                              (((ppu->scanline)-y)&7)))+ \
-                            ((ppu->scanline)-y > 16 ? \
-                             (ppu->big_sprites^v_flip)*16 : \
-                             (ppu->big_sprites ? \
-                              (ppu->big_sprites^v_flip^1)*16 : 0)); \
+                ppu->addr = (ppu->tile_id<<4)|MN_PPU_OAM_BP_LINE(); \
                 if(!ppu->big_sprites){ \
                     ppu->addr |= ((ppu->ctrl&1<<3)<<(12-3)); \
+                }else{ \
+                    if((ppu->scanline-y) >= 8){ \
+                        /* Get the next tile */ \
+                        ppu->addr += 1<<4; \
+                    } \
+                    if(v_flip){ \
+                        /* Draw the second tile first */ \
+                        ppu->addr ^= 1<<4; \
+                    } \
                 } \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
@@ -529,15 +534,18 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 y = ppu->secondary_oam[pos]; \
                 attr = ppu->secondary_oam[pos+2]; \
                 v_flip = attr>>7; \
-                ppu->addr = ((ppu->tile_id<<4)|(1<<3)|(v_flip ? \
-                              8-(((ppu->scanline)-y)&7) : \
-                              (((ppu->scanline)-y)&7)))+ \
-                            ((ppu->scanline)-y > 16 ? \
-                             (ppu->big_sprites^v_flip)*16 : \
-                             (ppu->big_sprites ? \
-                              (ppu->big_sprites^v_flip^1)*16 : 0)); \
+                ppu->addr = (ppu->tile_id<<4)|(1<<3)|MN_PPU_OAM_BP_LINE(); \
                 if(!ppu->big_sprites){ \
                     ppu->addr |= ((ppu->ctrl&1<<3)<<(12-3)); \
+                }else{ \
+                    if((ppu->scanline-y) >= 8){ \
+                        /* Get the next tile */ \
+                        ppu->addr += 1<<4; \
+                    } \
+                    if(v_flip){ \
+                        /* Draw the second tile first */ \
+                        ppu->addr ^= 1<<4; \
+                    } \
                 } \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
@@ -565,9 +573,9 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     unsigned char inc = 0;
 
 #if MN_PPU_DEBUG_SPRITE_EVAL
-    if(ppu->cycle == 0){
+    if(ppu->cycle == 257){
         unsigned char i, n;
-        puts("Secondary OAM dump:");
+        printf("[scanline %u] Secondary OAM dump:\n", ppu->scanline);
         for(i=0;i<32;i+=4){
             for(n=0;n<4;n++){
                 printf("%02x ", ppu->secondary_oam[i+n]);
@@ -693,28 +701,48 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
         /* Background pipeline initialization */
     }
 
+#if MN_PPU_DEBUG_SPRITE_EVAL
+    if(ppu->cycle == 340){
+        int i;
+        printf("[scanline %u] Sprite FIFO dump:\n", ppu->scanline);
+        for(i=0;i<8;i++){
+            printf("l: %02x h: %02x x: %02x p: %u bg? %u\n",
+                   ppu->sprite_fifo[i].low_bp, ppu->sprite_fifo[i].high_bp,
+                   ppu->sprite_fifo[i].down_counter,
+                   ppu->sprite_fifo[i].palette, ppu->sprite_fifo[i].priority);
+        }
+    }
+#endif
+
     if(ppu->cycle >= 1 && ppu->cycle <= 256){
         /* Produce a pixel */
 
-        for(i=0;i<8;i++){
-            if(ppu->sprite_fifo[i].down_counter){
-                /* Decrease the counter */
-                ppu->sprite_fifo[i].down_counter--;
-            }else{
+#if MN_PPU_DEBUG_SPRITE_EVAL
+        if(ppu->scanline == 195) printf("%u down counter: %u\n", ppu->cycle,
+                                        ppu->sprite_fifo[0].down_counter);
+#endif
+        for(i=8;i--;){
+            if(ppu->sprite_fifo[i].down_counter <= 0 &&
+               ppu->sprite_fifo[i].down_counter > -8){
                 /* Get a sprite pixel */
-                sprite_pixel = (ppu->sprite_fifo[i].low_bp>>7)|
-                               (ppu->sprite_fifo[i].high_bp>>7)<<1|
-                               ppu->sprite_fifo[i].palette<<2|
-                               ppu->sprite_fifo[i].priority<<4;
+                register unsigned char pixel;
+
+                pixel = (ppu->sprite_fifo[i].low_bp>>7)|
+                        (ppu->sprite_fifo[i].high_bp>>7)<<1|
+                        ppu->sprite_fifo[i].palette<<2|
+                        ppu->sprite_fifo[i].priority<<4;
 
                 if(!i && ppu->sprite0_loaded){
-                    sprite_pixel |= 1<<5;
+                    pixel |= 1<<5;
                 }
+
+                if(pixel&3) sprite_pixel = pixel;
 
                 /* Shift the shift registers */
                 ppu->sprite_fifo[i].low_bp <<= 1;
                 ppu->sprite_fifo[i].high_bp <<= 1;
             }
+            ppu->sprite_fifo[i].down_counter--;
         }
     }
 

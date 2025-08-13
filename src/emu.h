@@ -130,7 +130,7 @@ typedef struct {
         /* The down counter is initialized to the X position of the sprite and
          * counts down on each pixel. Once it reaches 0 the sprite starts
          * rendering. */
-        unsigned char down_counter;
+        short int down_counter;
         unsigned int palette : 2;
         unsigned int priority : 1;
     } sprite_fifo[8];
