@@ -420,10 +420,19 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
         }
+
+        /* NOTE: The NesDev wiki says shift registers should shift for the
+         * first time at cycle 2, but it was causing a small graphical
+         * glitch. I don't know if I should perform the shifts before the
+         * fetches then... */
+#if 0
         if(ppu->cycle >= 2){
             /* Shift registers shift for the first time at cycle 2 */
+#endif
             MN_PPU_BG_SHIFT();
+#if 0
         }
+#endif
 
         if(ppu->cycle == 256){
             /* Increment Y */
@@ -527,7 +536,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                            ((attr>>2)&1)<<5|((attr>>1)&1)<<6|(attr&1)<<7; \
                 } \
                 /* XXX: Is this accurate? */ \
-                if(ppu->secondary_oam_pos < pos) attr = 0; \
+                if(ppu->secondary_oam_pos <= pos) attr = 0; \
                 ppu->sprite_fifo[(step)>>3].low_bp = attr; \
                 break; \
             case 6: \
@@ -560,7 +569,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                            ((attr>>2)&1)<<5|((attr>>1)&1)<<6|(attr&1)<<7; \
                 } \
                 /* XXX: Is this accurate? */ \
-                if(ppu->secondary_oam_pos < pos) attr = 0; \
+                if(ppu->secondary_oam_pos <= pos) attr = 0; \
                 ppu->sprite_fifo[(step)>>3].high_bp = attr; \
                 break; \
         } \
