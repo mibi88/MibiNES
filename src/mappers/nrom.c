@@ -207,8 +207,7 @@ static unsigned char mn_nrom_vram_read(void *_emu, void *_mapper,
         }
     }else if(addr >= 0x3F00){
         if(!(addr&3)){
-            /* Return the universal background color */
-            return rom->vram[0x800];
+            return rom->vram[0x800+(addr&0xF)];
         }
         return rom->vram[0x800+(addr&0x1F)];
     }
@@ -229,8 +228,7 @@ static void mn_nrom_vram_write(void *_emu, void *_mapper,
         }
     }else if(addr >= 0x3F00){
         if(!(addr&3)){
-            /* Change the universal background color */
-            rom->vram[0x800] = value;
+            rom->vram[0x800+(addr&0xF)] = value;
         }
         rom->vram[0x800+(addr&0x1F)] = value;
     }else if(rom->chr_ram && addr < 0x2000){

@@ -343,6 +343,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                        !(sprite_pixel&3)){
                         pixel = bg_pixel;
                     }
+
+                    if(!(pixel&3)) pixel = 0;
+
                     MN_PPU_DRAW_PIXEL(pixel);
                 }
             }
@@ -788,10 +791,11 @@ unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
             break;
         case MN_PPU_PPUDATA:
             /* XXX: Is this correct */
-            v = ppu->io_bus;
+            v = ppu->read_buffer;
             /* The highest bit is unused for access through $2007. */
             addr = ppu->v&MN_PPU_BIT_RANGE(0, 14);
-            ppu->io_bus = emu->mapper.vram_read(emu, &emu->mapper, addr);
+            ppu->read_buffer = emu->mapper.vram_read(emu, &emu->mapper, addr);
+            ppu->io_bus = ppu->read_buffer;
             if((ppu->scanline < 240 || ppu->scanline == 261) &&
                (ppu->mask&MN_PPU_MASK_RENDER)){
                 /* The PPU is rendering */
@@ -800,15 +804,23 @@ unsigned char mn_ppu_read(MNPPU *ppu, MNEmu *emu, unsigned short int reg) {
                 MN_PPU_BG_COARSE_X_INC();
                 MN_PPU_BG_Y_INC();
                 /* XXX: Is this a "load next value" as written in the wiki? */
-                ppu->io_bus = emu->mapper.vram_read(emu, &emu->mapper,
-                                                    ppu->v&MN_PPU_BIT_RANGE(0,
-                                                                14));
+                 ppu->read_buffer = emu->mapper.
+                                    vram_read(emu, &emu->mapper,
+                                              ppu->v&MN_PPU_BIT_RANGE(0, 14));
+                 ppu->io_bus = ppu->read_buffer;
             }else{
                 ppu->v += ppu->ctrl&MN_PPU_CTRL_INC ? 32 : 1;
             }
             /* Palette reads are unbuffered (if the PPU supports palette
              * reads). */
-            if(addr >= 0x3F00) return ppu->io_bus;
+            if(addr >= 0x3F00){
+                v = ppu->read_buffer;
+                ppu->read_buffer = emu->mapper.
+                                   vram_read(emu, &emu->mapper,
+                                             ((addr&0xFF)+0x2700)&
+                                             MN_PPU_BIT_RANGE(0, 14));
+                v = (v&0x3F)|(ppu->read_buffer&~0x3F);
+            }
             return v;
             break;
     }

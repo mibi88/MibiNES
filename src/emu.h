@@ -144,6 +144,8 @@ typedef struct {
 
     unsigned char ext;
 
+    unsigned char read_buffer;
+
     unsigned int even_frame : 1;
 
     unsigned int trigger_nmi : 1;

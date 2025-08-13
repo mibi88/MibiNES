@@ -2274,8 +2274,10 @@ OPCODE_LOADED:
             cpu->jammed = 1;
             break;
         default:
+#if 1
             /* Unknown opcode, jam the CPU for now */
             cpu->jammed = 1;
+#endif
     }
 
 #if MN_CPU_DEBUG && MN_CPU_CYCLE_DETAIL
