@@ -55,7 +55,8 @@ enum {
 enum {
     /* TODO: Add masks for all other flags */
     MN_PPU_CTRL_INC = 1<<2,
-    MN_PPU_CTRL_NMI = 1<<7
+    MN_PPU_CTRL_NMI = 1<<7,
+    MN_PPU_CTRL_BIG_SPRITES = 1<<5
 };
 
 enum {

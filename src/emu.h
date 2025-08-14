@@ -135,8 +135,6 @@ typedef struct {
         unsigned int priority : 1;
     } sprite_fifo[8];
 
-    unsigned int big_sprites : 1;
-
     unsigned char step;
 
     /* Pixel output is delayed 4 cycles further. */

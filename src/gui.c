@@ -234,7 +234,9 @@ static void mn_gui_update(void) {
 
     last_time = new_time;
 
-    /*printf("\033[2Kms: %lu\r", ms);*/
+#if 1
+    printf("\033[2Kms: %lu\r", ms);
+#endif
     fflush(stdout);
 
     XFlush(display);

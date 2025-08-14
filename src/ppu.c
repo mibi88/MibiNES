@@ -469,9 +469,12 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     }
 
 #define MN_PPU_OAM_IN_RANGE(y) ((y) <= ppu->scanline && \
-                            (y)+(ppu->big_sprites ? 16 : 8) > ppu->scanline)
+                            (y)+(MN_PPU_OAM_BIG_SPRITES ? 16 : 8) > ppu-> \
+                                 scanline)
 
 #define MN_PPU_OAM_BP_LINE() (((ppu->scanline-y)&7)^(v_flip*7))
+
+#define MN_PPU_OAM_BIG_SPRITES (ppu->ctrl&MN_PPU_CTRL_BIG_SPRITES)
 
 #define MN_PPU_OAM_FETCH(step) \
     { \
@@ -506,10 +509,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                  * the sprite FIFO a.k.a. the motion picture buffer? */ \
                 y = ppu->secondary_oam[pos]; \
                 ppu->tile_id = ppu->secondary_oam[pos+1]; \
-                if(ppu->big_sprites){ \
-                    ppu->tile_id <<= 1; \
-                    ppu->tile_id *= 2; \
-                } \
                 attr = ppu->secondary_oam[pos+2]; \
                 ppu->sprite_fifo[(step)>>3].palette = attr&3; \
                 ppu->sprite_fifo[(step)>>3].priority = attr>>5; \
@@ -517,7 +516,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                     ppu->secondary_oam[pos+3]; \
                 v_flip = attr>>7; \
                 ppu->addr = (ppu->tile_id<<4)|MN_PPU_OAM_BP_LINE(); \
-                if(!ppu->big_sprites){ \
+                if(!MN_PPU_OAM_BIG_SPRITES){ \
                     ppu->addr |= ((ppu->ctrl&1<<3)<<(12-3)); \
                 }else{ \
                     if((ppu->scanline-y) >= 8){ \
@@ -550,17 +549,19 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                 attr = ppu->secondary_oam[pos+2]; \
                 v_flip = attr>>7; \
                 ppu->addr = (ppu->tile_id<<4)|(1<<3)|MN_PPU_OAM_BP_LINE(); \
-                if(!ppu->big_sprites){ \
+                if(!MN_PPU_OAM_BIG_SPRITES){ \
                     ppu->addr |= ((ppu->ctrl&1<<3)<<(12-3)); \
                 }else{ \
+                    ppu->addr &= ~(1<<4); \
                     if((ppu->scanline-y) >= 8){ \
                         /* Get the next tile */ \
-                        ppu->addr += 1<<4; \
+                        ppu->addr |= 1<<4; \
                     } \
                     if(v_flip){ \
                         /* Draw the second tile first */ \
                         ppu->addr ^= 1<<4; \
                     } \
+                    ppu->addr |= (ppu->tile_id&1)<<12; \
                 } \
                 ppu->video_mem_bus = ppu->addr; \
                 break; \
@@ -840,7 +841,6 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
             ppu->t &= ~(3<<10);
             ppu->t |= (value&3)<<10;
             ppu->ctrl = value;
-            ppu->big_sprites = value>>6;
             break;
         case MN_PPU_MASK:
             if(ppu->since_start < ppu->startup_time) break;
