@@ -126,6 +126,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     }
 #endif
 
+#define MN_PPU_BG_ATTR_START_BIT (((ppu->v)&2)+((ppu->v>>4)&4))
+
 #define MN_PPU_BG_FILL_SHIFT_REGS() \
     { \
         /* The NesDev wiki says that the bitplanes go into the upper 8 bits of
@@ -137,8 +139,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->low_shift |= ppu->low_bp; \
         ppu->high_shift |= ppu->high_bp; \
  \
-        ppu->attr_latch1 = ppu->attr>>(((ppu->v)&2)+((ppu->v>>4)&4)); \
-        ppu->attr_latch2 = ppu->attr>>(((ppu->v)&2)+((ppu->v>>4)&4))>>1; \
+        ppu->attr_latch1 = ppu->attr>>MN_PPU_BG_ATTR_START_BIT; \
+        ppu->attr_latch2 = ppu->attr>>MN_PPU_BG_ATTR_START_BIT>>1; \
     }
 
 #define MN_PPU_BG_FETCHES_DONE() \
@@ -156,13 +158,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             case 0: \
                 ppu->addr = 0x2000|(ppu->v&0x0FFF); \
                 ppu->video_mem_bus = ppu->addr; \
- \
-                /* NOTE: Previously I was performing this on the 8th step, but
-                 * it caused the background to be shifted by 1px to the right,
-                 * but I'm not sure which one is more accurate. Is it more
-                 * accurate to perform those operations on the 8th step, i.e.,
-                 * the case for ((step)&7) == 7? */ \
-                if(!((step)&7)) MN_PPU_BG_FETCHES_DONE(); \
  \
                 break; \
             case 1: \
@@ -201,6 +196,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
+                MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
     }
