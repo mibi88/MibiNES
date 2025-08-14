@@ -506,7 +506,10 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
                  * the sprite FIFO a.k.a. the motion picture buffer? */ \
                 y = ppu->secondary_oam[pos]; \
                 ppu->tile_id = ppu->secondary_oam[pos+1]; \
-                if(ppu->big_sprites) ppu->tile_id <<= 1; \
+                if(ppu->big_sprites){ \
+                    ppu->tile_id <<= 1; \
+                    ppu->tile_id *= 2; \
+                } \
                 attr = ppu->secondary_oam[pos+2]; \
                 ppu->sprite_fifo[(step)>>3].palette = attr&3; \
                 ppu->sprite_fifo[(step)>>3].priority = attr>>5; \
@@ -866,7 +869,7 @@ void mn_ppu_write(MNPPU *ppu, MNEmu *emu, unsigned short int reg,
                 ppu->w = 0;
             }else{
                 ppu->t &= ~MN_PPU_BITS(5);
-                ppu->t |= (value&MN_PPU_BITS(5))>>3;
+                ppu->t |= (value>>3);
                 ppu->x = value;
                 ppu->w = 1;
             }
