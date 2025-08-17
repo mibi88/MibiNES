@@ -56,7 +56,7 @@ if [ $debug = true ]; then
     cflags+=(-O0 -g)
 else
     echo "-- Release build..."
-    cflags+=(-Ofast)
+    cflags+=(-O3)
     ldflags+=(-flto=auto)
 fi
 

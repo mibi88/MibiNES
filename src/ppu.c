@@ -154,11 +154,12 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 
 #define MN_PPU_BG_FETCH(step) \
     { \
-        switch((step)&7){ \
+        switch((step)%8){ \
             case 0: \
+                if(ppu->cycle != 321) MN_PPU_BG_FETCHES_DONE(); \
+ \
                 ppu->addr = 0x2000|(ppu->v&0x0FFF); \
                 ppu->video_mem_bus = ppu->addr; \
- \
                 break; \
             case 1: \
                 ppu->tile_id = (ppu->video_mem_bus = emu->mapper. \
@@ -196,13 +197,15 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 ppu->high_bp = (ppu->video_mem_bus = emu->mapper. \
                                 vram_read(emu, &emu->mapper, \
                                           ppu->addr)); \
-                MN_PPU_BG_FETCHES_DONE(); \
                 break; \
         } \
     }
 
 #define MN_PPU_BG_SHIFT() \
     { \
+        printf("shift %u\n", shifts); \
+        shifts++; \
+ \
         /* Shift the shift registers */ \
         ppu->low_shift <<= 1; \
         ppu->low_shift |= 1; \
@@ -267,7 +270,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu);
  * Border region:
  * 16 pixels left
  * 11 pixels right
- * 2 pixels  down
+ * 2  pixels down
  *
  */
 void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
@@ -386,8 +389,20 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     ppu->cycles_since_cpu_cycle++;
 }
 
+unsigned int shifts = 0;
+
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     unsigned char pixel = 0;
+
+    if(ppu->cycle == 1){
+        puts("scanline start");
+    }
+    if(ppu->cycle == 321){
+        shifts = 0;
+    }
+
+    puts("cycle");
+    if(ppu->cycle == 257) puts("hblank start");
 
     /* Memory fetches */
     if(ppu->cycle >= 321 && ppu->cycle <= 336){
@@ -418,6 +433,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         if(ppu->scanline != 261){
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
+            puts("pixel");
         }
 
         /* NOTE: The NesDev wiki says shift registers should shift for the
