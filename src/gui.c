@@ -225,6 +225,8 @@ static void mn_gui_update(void) {
         needs_resize = 0;
     }
 
+    memset(back_buffer, 0, w*h*4);
+
     /* Cap it at 16 ms */
     do{
         new_time = mn_gui_get_time();
@@ -294,8 +296,26 @@ static void mn_gui_rect(int x, int y, int rw, int rh, long int color) {
 void mn_gui_pixel(long int color) {
     /* HACK: I had to add 1 to the width and height to avoid having a black
      * grid */
-    mn_gui_rect(x*w/W, y*h/H, (w/W > 0 ? w/W : 1)+1, (h/H > 0 ? h/H : 1)+1,
-                color);
+
+    register int rx = x*h/H;
+    register int ry = y*h/H;
+    register int rw = (h/H > 0 ? h/H : 1)+1;
+    register int rh = (h/H > 0 ? h/H : 1)+1;
+
+    register int tmp;
+
+    if(w < h){
+        rx = x*w/W;
+        ry = y*w/W;
+
+        rw = (w/W > 0 ? w/W : 1)+1;
+        rh = (w/W > 0 ? w/W : 1)+1;
+    }
+
+    rx += (w-(w < h ? w : W*h/H))/2;
+    ry += (h-(w < h ? H*w/W : h))/2;
+
+    mn_gui_rect(rx, ry, rw, rh, color);
 
     x++;
     if(x >= W){

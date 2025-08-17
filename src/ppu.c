@@ -203,9 +203,6 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 
 #define MN_PPU_BG_SHIFT() \
     { \
-        printf("shift %u\n", shifts); \
-        shifts++; \
- \
         /* Shift the shift registers */ \
         ppu->low_shift <<= 1; \
         ppu->low_shift |= 1; \
@@ -389,20 +386,8 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
     ppu->cycles_since_cpu_cycle++;
 }
 
-unsigned int shifts = 0;
-
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     unsigned char pixel = 0;
-
-    if(ppu->cycle == 1){
-        puts("scanline start");
-    }
-    if(ppu->cycle == 321){
-        shifts = 0;
-    }
-
-    puts("cycle");
-    if(ppu->cycle == 257) puts("hblank start");
 
     /* Memory fetches */
     if(ppu->cycle >= 321 && ppu->cycle <= 336){
@@ -433,7 +418,6 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         if(ppu->scanline != 261){
             /* Produce a background pixel */
             MN_PPU_BG_GET_PIXEL();
-            puts("pixel");
         }
 
         /* NOTE: The NesDev wiki says shift registers should shift for the
