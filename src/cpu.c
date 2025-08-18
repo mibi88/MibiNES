@@ -471,7 +471,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         } \
     }
 
-#define MN_CPU_ABSI_RMW(op) \
+#define MN_CPU_ABSI_RMW(i, op) \
     { \
         switch(cpu->cycle){ \
             case 1: \
@@ -483,7 +483,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
             case 3: \
                 cpu->tmp = cpu->t; \
                 cpu->t = MN_CPU_READ(cpu->pc); \
-                cpu->tmp += cpu->x; \
+                cpu->tmp += i; \
                 tmp = cpu->tmp>>8; \
                 cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
                 cpu->t = tmp; \
@@ -690,6 +690,40 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
                  * fixed. */ \
                 tmp = MN_CPU_READ(cpu->tmp); \
                 op; \
+                break; \
+        } \
+    }
+
+#define MN_CPU_INDIDX_RMW(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 1: \
+                cpu->target_cycle = 8; \
+                break; \
+            case 2: \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
+                break; \
+            case 4: \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
+                cpu->tmp2 = cpu->tmp+cpu->y; \
+                cpu->tmp = (cpu->tmp2&0xFF)|(cpu->tmp&0xFF00); \
+                break; \
+            case 5: \
+                MN_CPU_READ(cpu->tmp); \
+                cpu->tmp = cpu->tmp2; \
+                break; \
+            case 6: \
+                cpu->t = MN_CPU_READ(cpu->tmp); \
+                break; \
+            case 7: \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
+                op; \
+                break; \
+            case 8: \
+                MN_CPU_WRITE(cpu->tmp, cpu->t); \
                 break; \
         } \
     }
@@ -1882,35 +1916,35 @@ OPCODE_LOADED:
 
         case 0x1E:
             /* ASL */
-            MN_CPU_ABSI_RMW({
+            MN_CPU_ABSI_RMW(cpu->x, {
                 MN_CPU_ASL(cpu->t);
             });
             break;
 
         case 0x3E:
             /* ROL */
-            MN_CPU_ABSI_RMW({
+            MN_CPU_ABSI_RMW(cpu->x, {
                 MN_CPU_ROL(cpu->t);
             });
             break;
 
         case 0x5E:
             /* LSR */
-            MN_CPU_ABSI_RMW({
+            MN_CPU_ABSI_RMW(cpu->x, {
                 MN_CPU_LSR(cpu->t);
             });
             break;
 
         case 0x7E:
             /* ROR */
-            MN_CPU_ABSI_RMW({
+            MN_CPU_ABSI_RMW(cpu->x, {
                 MN_CPU_ROR(cpu->t);
             });
             break;
 
         case 0xDE:
             /* DEC */
-            MN_CPU_ABSI_RMW({
+            MN_CPU_ABSI_RMW(cpu->x, {
                 cpu->t--;
 
                 MN_CPU_UPDATE_NZ(cpu->t);
@@ -1919,7 +1953,7 @@ OPCODE_LOADED:
 
         case 0xFE:
             /* INC */
-            MN_CPU_ABSI_RMW({
+            MN_CPU_ABSI_RMW(cpu->x, {
                 cpu->t++;
 
                 MN_CPU_UPDATE_NZ(cpu->t);
@@ -2167,6 +2201,7 @@ OPCODE_LOADED:
         case 0x82:
         case 0x89:
         case 0xC2:
+        case 0xE2:
             /* NOP */
             MN_CPU_IMM({
                 /* Do nothing */
@@ -2183,50 +2218,34 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0x0B:
+            /* ANC */
+            MN_CPU_IMM({
+                cpu->a &= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+                MN_CPU_ASL(cpu->a);
+            });
+            break;
+
         /* Absolute addressing */
 
         case 0x0C:
             /* NOP */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 4;
-                    break;
-                case 2:
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = MN_CPU_READ(cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    MN_CPU_READ(cpu->tmp);
-                    break;
-            }
+            MN_CPU_ABS_READ({
+                /* Do nothing */
+            });
             break;
 
         case 0xAF:
             /* LAX */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 4;
-                    break;
-                case 2:
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = MN_CPU_READ(cpu->pc);
-                    cpu->tmp = cpu->t|(tmp<<8);
-                    cpu->pc++;
-                    break;
-                case 4:
-                    /* XXX: Is LAX performing only one or two reads? */
-                    cpu->a = MN_CPU_READ(cpu->tmp);
-                    cpu->x = cpu->a;
+            MN_CPU_ABS_READ({
+                /* XXX: Is LAX performing only one or two reads? */
+                cpu->a = tmp;
+                cpu->x = cpu->a;
 
-                    MN_CPU_UPDATE_NZ(cpu->a);
-                    break;
-            }
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
             break;
 
         case 0x8F:
@@ -2234,6 +2253,42 @@ OPCODE_LOADED:
             /* NOTE: Apparently it is unstable on the NES */
             MN_CPU_ABS_STORE({
                 tmp = cpu->a&cpu->x;
+            });
+            break;
+
+        case 0x0F:
+            /* SLO */
+            MN_CPU_ABS_RMW({
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        /* Indexed absolute addressing */
+
+        /* With X */
+
+        case 0x1F:
+            /* SLO */
+            MN_CPU_ABSI_RMW(cpu->x, {
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        /* With Y */
+
+        case 0x1B:
+            /* SLO */
+            MN_CPU_ABSI_RMW(cpu->y, {
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
             });
             break;
 
@@ -2256,6 +2311,65 @@ OPCODE_LOADED:
                 tmp = cpu->a&cpu->x;
             });
             break;
+
+        case 0x07:
+            /* SLO */
+            MN_CPU_ZP_RMW({
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        /* Indexed zeropage addressing */
+
+        /* With X */
+
+        case 0x14:
+            /* NOP */
+            MN_CPU_ZPI_READ(cpu->x, {
+                /* Do nothing */
+            });
+            break;
+
+        case 0x17:
+            /* SLO */
+            MN_CPU_ZPI_RMW({
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        /* With Y */
+
+        /* Indexed indirect addressing */
+
+        case 0x03:
+            /* SLO */
+            MN_CPU_IDXIND_RMW({
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        /* Indirect indexed addressing */
+
+        case 0x13:
+            /* SLO */
+            MN_CPU_INDIDX_RMW({
+                MN_CPU_ASL(cpu->t);
+                cpu->a |= cpu->t;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        /* STP */
 
         case 0x02:
         case 0x12:
