@@ -110,6 +110,8 @@ static unsigned char mn_gui_player2_buttons(void) {
     return buttons2;
 }
 
+static unsigned char better_ratio = 1;
+
 extern MNCtrl mn_nesctrl;
 
 int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
@@ -293,27 +295,49 @@ static void mn_gui_rect(int x, int y, int rw, int rh, long int color) {
     }
 }
 
+/* The ratio of the screen as a fraction (numerator/denominator) */
+#define MN_GUI_RATIO_NUM   6
+#define MN_GUI_RATIO_DENOM 5
+
 void mn_gui_pixel(long int color) {
     /* HACK: I had to add 1 to the width and height to avoid having a black
      * grid */
 
-    register int rx = x*h/H;
-    register int ry = y*h/H;
-    register int rw = (h/H > 0 ? h/H : 1)+1;
-    register int rh = (h/H > 0 ? h/H : 1)+1;
+    register int rx, ry;
+    register int rw, rh;
 
-    register int tmp;
+    if(better_ratio){
+        register int tw = w, th = h;
+        if(th*MN_GUI_RATIO_NUM/MN_GUI_RATIO_DENOM < tw){
+            tw = th*MN_GUI_RATIO_NUM/MN_GUI_RATIO_DENOM;
+        }else{
+            th = tw*MN_GUI_RATIO_DENOM/MN_GUI_RATIO_NUM;
+        }
 
-    if(w < h){
-        rx = x*w/W;
-        ry = y*w/W;
+        rx = x*tw/W;
+        ry = y*th/H;
+        rw = tw/W+1;
+        rh = th/H+1;
 
-        rw = (w/W > 0 ? w/W : 1)+1;
-        rh = (w/W > 0 ? w/W : 1)+1;
+        rx += (w-tw)/2;
+        ry += (h-th)/2;
+    }else{
+        rx = x*h/H;
+        ry = y*h/H;
+        rw = (h/H > 0 ? h/H : 1)+1;
+        rh = (h/H > 0 ? h/H : 1)+1;
+
+        if(w < h){
+            rx = x*w/W;
+            ry = y*w/W;
+
+            rw = (w/W > 0 ? w/W : 1)+1;
+            rh = (w/W > 0 ? w/W : 1)+1;
+        }
+
+        rx += (w-(w < h ? w : W*h/H))/2;
+        ry += (h-(w < h ? H*w/W : h))/2;
     }
-
-    rx += (w-(w < h ? w : W*h/H))/2;
-    ry += (h-(w < h ? H*w/W : h))/2;
 
     mn_gui_rect(rx, ry, rw, rh, color);
 
