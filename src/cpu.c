@@ -633,7 +633,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         } \
     }
 
-#define MN_CPU_IDXIND_WRITE(op) \
+#define MN_CPU_IDXIND_STORE(op) \
     { \
         switch(cpu->cycle){ \
             case 1: \
@@ -654,7 +654,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
                 break; \
             case 6: \
                 op; \
-                MN_CPU_WRITE(cpu->tmp, cpu->t); \
+                MN_CPU_WRITE(cpu->tmp, tmp); \
                 break; \
         } \
     }
@@ -728,7 +728,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         } \
     }
 
-#define MN_CPU_INDIDX_WRITE(op) \
+#define MN_CPU_INDIDX_STORE(op) \
     { \
         switch(cpu->cycle){ \
             case 1: \
@@ -750,8 +750,6 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
                 cpu->tmp = cpu->tmp2; \
                 break; \
             case 6: \
-                /* This cycle is only executed if the effective address was
-                 * fixed. */ \
                 op; \
                 MN_CPU_WRITE(cpu->tmp, tmp); \
                 break; \
@@ -2077,8 +2075,8 @@ OPCODE_LOADED:
 
         case 0x81:
             /* STA */
-            MN_CPU_IDXIND_WRITE({
-                cpu->t = cpu->a;
+            MN_CPU_IDXIND_STORE({
+                tmp = cpu->a;
             });
             break;
 
@@ -2147,7 +2145,7 @@ OPCODE_LOADED:
 
         case 0x91:
             /* STA */
-            MN_CPU_INDIDX_WRITE({
+            MN_CPU_INDIDX_STORE({
                 tmp = cpu->a;
             });
             break;
@@ -2210,7 +2208,7 @@ OPCODE_LOADED:
 
         case 0xAB:
             /* LAX */
-            MN_CPU_IMP({
+            MN_CPU_IMM({
                 cpu->a = cpu->t;
                 cpu->x = cpu->a;
 
@@ -2246,6 +2244,17 @@ OPCODE_LOADED:
 
                 MN_CPU_UPDATE_NZ(cpu->a);
                 MN_CPU_ROR(cpu->a);
+            });
+            break;
+
+        case 0x8B:
+            /* XAA */
+            /* TODO: Make it a bit broken to be closer to the expected
+             * behaviour :D */
+            MN_CPU_IMM({
+                cpu->a = cpu->x;
+                cpu->a &= cpu->t;
+                MN_CPU_UPDATE_NZ(cpu->a);
             });
             break;
 
@@ -2409,6 +2418,16 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xBF:
+            /* LAX */
+            MN_CPU_ABSI_READ(cpu->y, {
+                cpu->a = tmp;
+                cpu->x = cpu->a;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
         /* Zeropage addressing */
 
         case 0x04:
@@ -2532,6 +2551,24 @@ OPCODE_LOADED:
 
         /* With Y */
 
+        case 0x97:
+            /* SAX */
+            /* NOTE: Apparently it is unstable on the NES */
+            MN_CPU_ZPI_STORE(cpu->y, {
+                tmp = cpu->a&cpu->x;
+            });
+            break;
+
+        case 0xB7:
+            /* LAX */
+            MN_CPU_ZPI_READ(cpu->y, {
+                cpu->a = tmp;
+                cpu->x = cpu->a;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
         /* Indexed indirect addressing */
 
         case 0x03:
@@ -2572,6 +2609,24 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0x83:
+            /* SAX */
+            /* NOTE: Apparently it is unstable on the NES */
+            MN_CPU_IDXIND_STORE({
+                tmp = cpu->a&cpu->x;
+            });
+            break;
+
+        case 0xA3:
+            /* LAX */
+            MN_CPU_IDXIND_READ({
+                cpu->a = tmp;
+                cpu->x = cpu->a;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
         /* Indirect indexed addressing */
 
         case 0x13:
@@ -2609,6 +2664,16 @@ OPCODE_LOADED:
             MN_CPU_INDIDX_RMW({
                 MN_CPU_ROR(cpu->t);
                 MN_CPU_ADC(cpu->t);
+            });
+            break;
+
+        case 0xB3:
+            /* LAX */
+            MN_CPU_INDIDX_READ({
+                cpu->a = tmp;
+                cpu->x = cpu->a;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
             });
             break;
 
