@@ -2351,6 +2351,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xEF:
+            /* ISC */
+            MN_CPU_ABS_RMW({
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
+            });
+            break;
+
         /* Indexed absolute addressing */
 
         /* With X */
@@ -2412,6 +2420,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xFF:
+            /* ISC */
+            MN_CPU_ABSI_RMW(cpu->x, {
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
+            });
+            break;
+
         /* With Y */
 
         case 0x1B:
@@ -2467,6 +2483,14 @@ OPCODE_LOADED:
             MN_CPU_ABSI_RMW(cpu->y, {
                 cpu->t--;
                 MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
+        case 0xFB:
+            /* ISC */
+            MN_CPU_ABSI_RMW(cpu->y, {
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
             });
             break;
 
@@ -2545,6 +2569,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xE7:
+            /* ISC */
+            MN_CPU_ZP_RMW({
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
+            });
+            break;
+
         /* Indexed zeropage addressing */
 
         /* With X */
@@ -2604,6 +2636,14 @@ OPCODE_LOADED:
             MN_CPU_ZPI_RMW({
                 cpu->t--;
                 MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
+        case 0xF7:
+            /* ISC */
+            MN_CPU_ZPI_RMW({
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
             });
             break;
 
@@ -2693,6 +2733,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xE3:
+            /* ISC */
+            MN_CPU_IDXIND_RMW({
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
+            });
+            break;
+
         /* Indirect indexed addressing */
 
         case 0x13:
@@ -2748,6 +2796,14 @@ OPCODE_LOADED:
             MN_CPU_INDIDX_RMW({
                 cpu->t--;
                 MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
+        case 0xF3:
+            /* ISC */
+            MN_CPU_INDIDX_RMW({
+                cpu->t++;
+                MN_CPU_SBC(cpu->t);
             });
             break;
 
