@@ -111,11 +111,11 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
 
 #define MN_CPU_CMP(reg, value) \
     { \
-        if(reg >= value) cpu->p |= MN_CPU_C; \
+        if((reg) >= (value)) cpu->p |= MN_CPU_C; \
         else cpu->p &= ~MN_CPU_C; \
-        if(reg == value) cpu->p |= MN_CPU_Z; \
+        if((reg) == (value)) cpu->p |= MN_CPU_Z; \
         else cpu->p &= ~MN_CPU_Z; \
-        if((reg-value)&(1<<7)) cpu->p |= MN_CPU_N; \
+        if(((reg)-(value))&(1<<7)) cpu->p |= MN_CPU_N; \
         else cpu->p &= ~MN_CPU_N; \
     }
 
@@ -2303,7 +2303,8 @@ OPCODE_LOADED:
 
         case 0x6B:
             /* ARR */
-            /* TODO: Fix this opcode, the status is incorrect */
+            /* TODO: Fix this opcode, the status register is incorrect after
+             * execution */
             MN_CPU_IMM({
                 cpu->a &= cpu->t;
                 tmp = cpu->a;
@@ -2334,7 +2335,7 @@ OPCODE_LOADED:
         case 0xCB:
             /* AXS */
             MN_CPU_IMM({
-                MN_CPU_CMP(cpu->a, cpu->t);
+                MN_CPU_CMP(cpu->a&cpu->x, cpu->t);
                 cpu->x = (cpu->a&cpu->x)-cpu->t;
                 MN_CPU_UPDATE_NZ(cpu->x);
             });
