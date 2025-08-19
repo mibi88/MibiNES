@@ -43,12 +43,12 @@ HEX   0/8   1/9   2/a   3/b   4/c   5/d   6/e   7/f
 0x78 [SEI] [ADC] {NOP} {RRA} {NOP} [ADC] [ROR] {RRA}
 0x80 {NOP} [STA] {NOP} {SAX} [STY] [STA] [STX] {SAX}
 0x88 [DEY] {NOP} [TXA] {XAA} [STY] [STA] [STX] {SAX}
-0x90 [BCC] [STA] {STP}  AHX  [STY] [STA] [STX] {SAX}
-0x98 [TYA] [STA] [TXS]  TAS   SHY  [STA]  SHX   AHX
+0x90 [BCC] [STA] {STP} {AHX} [STY] [STA] [STX] {SAX}
+0x98 [TYA] [STA] [TXS] {TAS} {SHY} [STA] {SHX} {AHX}
 0xa0 [LDY] [LDA] [LDX] {LAX} [LDY] [LDA] [LDX] {LAX}
 0xa8 [TAY] [LDA] [TAX] {LAX} [LDY] [LDA] [LDX] {LAX}
 0xb0 [BCS] [LDA] {STP} {LAX} [LDY] [LDA] [LDX] {LAX}
-0xb8 [CLV] [LDA] [TSX]  LAS  [LDY] [LDA] [LDX] {LAX}
+0xb8 [CLV] [LDA] [TSX] {LAS} [LDY] [LDA] [LDX] {LAX}
 0xc0 [CPY] [CMP] {NOP} {DCP} [CPY] [CMP] [DEC] {DCP}
 0xc8 [INY] [CMP] [DEX] {AXS} [CPY] [CMP] [DEC] {DCP}
 0xd0 [BNE] [CMP] {STP} {DCP} {NOP} [CMP] [DEC] {DCP}

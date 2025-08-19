@@ -71,6 +71,9 @@ typedef struct {
     unsigned int execute_int: 1;
 
     unsigned int is_irq : 1;
+
+    /* For SH* opcodes */
+    unsigned int skip_and : 1;
 } MNCPU;
 
 typedef struct {

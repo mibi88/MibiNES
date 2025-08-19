@@ -756,6 +756,69 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
         } \
     }
 
+
+#define MN_CPU_INDIDX_SH(op) \
+    { \
+        switch(cpu->cycle){ \
+            case 1: \
+                cpu->target_cycle = 6; \
+                break; \
+            case 2: \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->tmp = MN_CPU_READ(cpu->t); \
+                break; \
+            case 4: \
+                cpu->skip_and = ~cpu->rdy; \
+                cpu->tmp |= MN_CPU_READ((cpu->t+1)&0xFF)<<8; \
+                cpu->tmp2 = cpu->tmp+cpu->y; \
+                cpu->tmp = (cpu->tmp2&0xFF)|(cpu->tmp&0xFF00); \
+                break; \
+            case 5: \
+                tmp = MN_CPU_READ(cpu->tmp); \
+                cpu->t = cpu->tmp2-cpu->tmp; \
+                cpu->tmp = cpu->tmp2; \
+                break; \
+            case 6: \
+                op; \
+                if(cpu->t && !cpu->skip_and) cpu->tmp &= tmp<<8|0xFF; \
+                MN_CPU_WRITE(cpu->tmp, tmp); \
+                break; \
+        } \
+    }
+
+#define MN_CPU_ABSI_SH(i, op) \
+    { \
+        switch(cpu->cycle){ \
+            case 1: \
+                cpu->target_cycle = 5; \
+                break; \
+            case 2: \
+                cpu->pc++; \
+                break; \
+            case 3: \
+                cpu->skip_and = ~cpu->rdy; \
+                cpu->tmp = cpu->t; \
+                cpu->t = MN_CPU_READ(cpu->pc); \
+                cpu->tmp += i; \
+                tmp = cpu->tmp>>8; \
+                cpu->tmp = (cpu->tmp&0xFF)|(cpu->t<<8); \
+                cpu->t = tmp; \
+                cpu->pc++; \
+                break; \
+            case 4: \
+                MN_CPU_READ(cpu->tmp); \
+                cpu->tmp += cpu->t<<8; \
+                break; \
+            case 5: \
+                op; \
+                if(cpu->t && !cpu->skip_and) cpu->tmp &= tmp<<8|0xFF; \
+                MN_CPU_WRITE(cpu->tmp, tmp); \
+                break; \
+        } \
+    }
+
 #define MN_CPU_OP_INFO() \
     { \
         printf("%c%c%c%c%c1%c%c (p: %02x) op: %02x pc: %04x a: %02x x: %02x " \
@@ -2223,8 +2286,8 @@ OPCODE_LOADED:
                 cpu->a &= cpu->t;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
-                cpu->s &= ~MN_CPU_C;
-                cpu->s |= (cpu->s>>7)&1;
+                cpu->p &= ~MN_CPU_C;
+                cpu->p |= (cpu->p>>7)&1;
             });
             break;
 
@@ -2240,19 +2303,20 @@ OPCODE_LOADED:
 
         case 0x6B:
             /* ARR */
+            /* TODO: Fix this opcode, the status is incorrect */
             MN_CPU_IMM({
                 cpu->a &= cpu->t;
                 tmp = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
                 MN_CPU_ROR(cpu->a);
-                if((cpu->a&(1<<6)) != (tmp&(1<<6))){
-                    cpu->s |= MN_CPU_V;
-                }else{
-                    cpu->s &= ~MN_CPU_V;
-                }
-                cpu->s &= ~MN_CPU_C;
-                cpu->s |= (cpu->a>>6)&1;
+
+                cpu->p &= ~(1<<7);
+                cpu->p |= cpu->a&(1<<7);
+
+                if(cpu->a) cpu->p &= ~MN_CPU_Z;
+                else cpu->p |= MN_CPU_Z;
+
+                cpu->p &= ~MN_CPU_V;
+                cpu->p |= (tmp^cpu->a)&(1<<6);
             });
             break;
 
@@ -2412,6 +2476,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0x9C:
+            /* SHY */
+            MN_CPU_ABSI_SH(cpu->x, {
+                tmp = cpu->y;
+                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+            });
+            break;
+
         case 0xDF:
             /* DCP */
             MN_CPU_ABSI_RMW(cpu->x, {
@@ -2465,6 +2537,42 @@ OPCODE_LOADED:
             MN_CPU_ABSI_RMW(cpu->y, {
                 MN_CPU_ROR(cpu->t);
                 MN_CPU_ADC(cpu->t);
+            });
+            break;
+
+        case 0x9B:
+            /* TAS */
+            MN_CPU_ABSI_SH(cpu->y, {
+                cpu->s = cpu->a&cpu->x;
+                tmp = cpu->s;
+                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+            });
+            break;
+
+        case 0x9F:
+            /* AHX */
+            MN_CPU_ABSI_SH(cpu->y, {
+                tmp = cpu->a&cpu->x;
+                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+            });
+            break;
+
+        case 0x9E:
+            /* SHX */
+            MN_CPU_ABSI_SH(cpu->y, {
+                tmp = cpu->x;
+                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+            });
+            break;
+
+        case 0xBB:
+            /* LAS */
+            MN_CPU_ABSI_READ(cpu->y, {
+                cpu->a = tmp&cpu->s;
+                cpu->x = cpu->a;
+                cpu->s = cpu->a;
+
+                MN_CPU_UPDATE_NZ(cpu->a);
             });
             break;
 
@@ -2778,6 +2886,14 @@ OPCODE_LOADED:
             MN_CPU_INDIDX_RMW({
                 MN_CPU_ROR(cpu->t);
                 MN_CPU_ADC(cpu->t);
+            });
+            break;
+
+        case 0x93:
+            /* AHX */
+            MN_CPU_INDIDX_SH({
+                tmp = cpu->a&cpu->x;
+                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
             });
             break;
 
