@@ -49,12 +49,12 @@ HEX   0/8   1/9   2/a   3/b   4/c   5/d   6/e   7/f
 0xa8 [TAY] [LDA] [TAX] {LAX} [LDY] [LDA] [LDX] {LAX}
 0xb0 [BCS] [LDA] {STP} {LAX} [LDY] [LDA] [LDX] {LAX}
 0xb8 [CLV] [LDA] [TSX]  LAS  [LDY] [LDA] [LDX] {LAX}
-0xc0 [CPY] [CMP] {NOP}  DCP  [CPY] [CMP] [DEC]  DCP
-0xc8 [INY] [CMP] [DEX]  AXS  [CPY] [CMP] [DEC]  DCP
-0xd0 [BNE] [CMP] {STP}  DCP  {NOP} [CMP] [DEC]  DCP
-0xd8 [CLD] [CMP] {NOP}  DCP  {NOP} [CMP] [DEC]  DCP
+0xc0 [CPY] [CMP] {NOP} {DCP} [CPY] [CMP] [DEC] {DCP}
+0xc8 [INY] [CMP] [DEX] {AXS} [CPY] [CMP] [DEC] {DCP}
+0xd0 [BNE] [CMP] {STP} {DCP} {NOP} [CMP] [DEC] {DCP}
+0xd8 [CLD] [CMP] {NOP} {DCP} {NOP} [CMP] [DEC] {DCP}
 0xe0 [CPX] [SBC] {NOP}  ISC  [CPX] [SBC] [INC]  ISC
-0xe8 [INX] [SBC] [NOP]  SBC  [CPX] [SBC] [INC]  ISC
+0xe8 [INX] [SBC] [NOP] {SBC} [CPX] [SBC] [INC]  ISC
 0xf0 [BEQ] [SBC] {STP}  ISC  {NOP} [SBC] [INC]  ISC
 0xf8 [SED] [SBC] {NOP}  ISC  {NOP} [SBC] [INC]  ISC
 

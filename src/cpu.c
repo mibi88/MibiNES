@@ -2223,7 +2223,8 @@ OPCODE_LOADED:
                 cpu->a &= cpu->t;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
-                MN_CPU_ASL(cpu->a);
+                cpu->s &= ~MN_CPU_C;
+                cpu->s |= (cpu->s>>7)&1;
             });
             break;
 
@@ -2241,9 +2242,17 @@ OPCODE_LOADED:
             /* ARR */
             MN_CPU_IMM({
                 cpu->a &= cpu->t;
+                tmp = cpu->a;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
                 MN_CPU_ROR(cpu->a);
+                if((cpu->a&(1<<6)) != (tmp&(1<<6))){
+                    cpu->s |= MN_CPU_V;
+                }else{
+                    cpu->s &= ~MN_CPU_V;
+                }
+                cpu->s &= ~MN_CPU_C;
+                cpu->s |= (cpu->a>>6)&1;
             });
             break;
 
@@ -2255,6 +2264,15 @@ OPCODE_LOADED:
                 cpu->a = cpu->x;
                 cpu->a &= cpu->t;
                 MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xCB:
+            /* AXS */
+            MN_CPU_IMM({
+                MN_CPU_CMP(cpu->a, cpu->t);
+                cpu->x = (cpu->a&cpu->x)-cpu->t;
+                MN_CPU_UPDATE_NZ(cpu->x);
             });
             break;
 
@@ -2325,6 +2343,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xCF:
+            /* DCP */
+            MN_CPU_ABS_RMW({
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
         /* Indexed absolute addressing */
 
         /* With X */
@@ -2378,6 +2404,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xDF:
+            /* DCP */
+            MN_CPU_ABSI_RMW(cpu->x, {
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
         /* With Y */
 
         case 0x1B:
@@ -2425,6 +2459,14 @@ OPCODE_LOADED:
                 cpu->x = cpu->a;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xDB:
+            /* DCP */
+            MN_CPU_ABSI_RMW(cpu->y, {
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
             });
             break;
 
@@ -2495,6 +2537,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xC7:
+            /* DCP */
+            MN_CPU_ZP_RMW({
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
         /* Indexed zeropage addressing */
 
         /* With X */
@@ -2546,6 +2596,14 @@ OPCODE_LOADED:
             MN_CPU_ZPI_RMW({
                 MN_CPU_ROR(cpu->t);
                 MN_CPU_ADC(cpu->t);
+            });
+            break;
+
+        case 0xD7:
+            /* DCP */
+            MN_CPU_ZPI_RMW({
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
             });
             break;
 
@@ -2627,6 +2685,14 @@ OPCODE_LOADED:
             });
             break;
 
+        case 0xC3:
+            /* DCP */
+            MN_CPU_IDXIND_RMW({
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
+            });
+            break;
+
         /* Indirect indexed addressing */
 
         case 0x13:
@@ -2674,6 +2740,14 @@ OPCODE_LOADED:
                 cpu->x = cpu->a;
 
                 MN_CPU_UPDATE_NZ(cpu->a);
+            });
+            break;
+
+        case 0xD3:
+            /* DCP */
+            MN_CPU_INDIDX_RMW({
+                cpu->t--;
+                MN_CPU_CMP(cpu->a, cpu->t);
             });
             break;
 
