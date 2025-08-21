@@ -328,6 +328,15 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     if(!(ppu->mask&MN_PPU_MASK_BACKGROUND)) bg_pixel = 0;
                     if(!(ppu->mask&MN_PPU_MASK_SPRITES)) sprite_pixel = 0;
 
+                    if(!(ppu->mask&MN_PPU_MASK_BG_LEFTMOST_8PX) &&
+                       ppu->cycle <= 9){
+                        bg_pixel = 0;
+                    }
+                    if(!(ppu->mask&MN_PPU_MASK_SPRITES_LEFTMOST_8PX) &&
+                       ppu->cycle <= 9){
+                        sprite_pixel = 0;
+                    }
+
                     pixel = (sprite_pixel&3)|((((sprite_pixel>>2)&3)+4)<<2);
 
                     /* Select the right pixel and output it */

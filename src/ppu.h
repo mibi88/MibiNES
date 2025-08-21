@@ -62,10 +62,12 @@ enum {
 enum {
     /* TODO: Add masks for all other flags */
     MN_PPU_MASK_GRAYSCALE = 1,
+    MN_PPU_MASK_BG_LEFTMOST_8PX = 1<<1,
+    MN_PPU_MASK_SPRITES_LEFTMOST_8PX = 1<<2,
     MN_PPU_MASK_BACKGROUND = 1<<3,
     MN_PPU_MASK_SPRITES = 1<<4,
-    MN_PPU_MASK_RENDER = 3<<3  /* The ppu renders if both the 3rd and the 4th
-                                * bit are on. If both are off a backdrop color
+    MN_PPU_MASK_RENDER = 3<<3  /* The ppu renders if one of the 3rd and the 4th
+                                * bits are on. If both are off a backdrop color
                                 * is shown. */
 };
 
