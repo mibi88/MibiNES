@@ -2303,7 +2303,7 @@ OPCODE_LOADED:
 
         case 0x6B:
             /* ARR */
-            /* TODO: Fix this opcode, the status register is incorrect after
+            /* TODO: Fix this opcode, the overflow flag is incorrect after
              * execution */
             MN_CPU_IMM({
                 cpu->a &= cpu->t;
@@ -2317,7 +2317,7 @@ OPCODE_LOADED:
                 else cpu->p |= MN_CPU_Z;
 
                 cpu->p &= ~MN_CPU_V;
-                cpu->p |= (tmp^cpu->a)&(1<<6);
+                cpu->p |= (tmp^(cpu->a<<1))&(1<<6);
             });
             break;
 

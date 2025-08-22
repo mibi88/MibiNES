@@ -612,6 +612,8 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
         if(ppu->cycle == 65){
             ppu->secondary_oam_pos = 0;
             ppu->step = 0;
+            /* XXX: Is this way of handling sprite zero hit accurate enough? */
+            ppu->was_sprite0_loaded = ppu->sprite0_loaded;
             ppu->sprite0_loaded = 0;
 #if MN_PPU_DEBUG_SPRITE_EVAL
             puts("SPRITE EVALUATION");
@@ -753,7 +755,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                         ppu->sprite_fifo[i].palette<<2|
                         ppu->sprite_fifo[i].priority<<4;
 
-                if(!i && ppu->sprite0_loaded){
+                if(!i && ppu->was_sprite0_loaded){
                     pixel |= 1<<5;
                 }
 

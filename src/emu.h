@@ -161,6 +161,7 @@ typedef struct {
     unsigned char mask;
 
     unsigned int sprite0_loaded : 1;
+    unsigned int was_sprite0_loaded : 1;
 
     unsigned char *palette;
 
