@@ -117,6 +117,8 @@ static int ratio_denom = 5;
 extern MNCtrl mn_nesctrl;
 
 int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
+    int rc;
+
     XSetWindowAttributes attr;
 
     w = W;
@@ -127,9 +129,10 @@ int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
 
     last_time = mn_gui_get_time();
 
-    if(mn_emu_init(&emu, mn_gui_pixel, mn_gui_player1_buttons,
-                   mn_gui_player2_buttons, mn_nesctrl, mn_nesctrl, rom,
-                   palette, size, 0)){
+    if((rc = mn_emu_init(&emu, mn_gui_pixel, mn_gui_player1_buttons,
+                         mn_gui_player2_buttons, mn_nesctrl, mn_nesctrl, rom,
+                         palette, size, 0))){
+        printf("Failed initialization with error %d!\n", rc);
         return 1;
     }
 

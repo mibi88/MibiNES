@@ -68,6 +68,10 @@ int mn_cpu_init(MNCPU *cpu) {
     cpu->execute_int_next = 0;
     cpu->execute_int = 0;
 
+    cpu->opcode_loaded = 0;
+
+    cpu->skip_and = 0;
+
     return 0;
 }
 
@@ -560,7 +564,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
                     cpu->target_cycle++; \
                 }else{ \
                     cpu->opcode = tmp; \
-                    goto OPCODE_LOADED; \
+                    cpu->opcode_loaded = 1; \
                 } \
                 break; \
             case 4: \
@@ -569,7 +573,7 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
                     cpu->pc = cpu->tmp; \
                 }else{ \
                     cpu->opcode = tmp; \
-                    goto OPCODE_LOADED; \
+                    cpu->opcode_loaded = 1; \
                 } \
                 break; \
         } \
@@ -833,6 +837,2256 @@ static unsigned char mn_cpu_read(MNEmu *emu, unsigned short int addr) {
                cpu->pc, cpu->a, cpu->x, cpu->y, cpu->s); \
     }
 
+#define MN_CPU_OP(hex, op) \
+    void mn_cpu_opcode_##hex(MNCPU *cpu, MNEmu *emu) { \
+        unsigned char tmp; \
+        unsigned short int result; \
+ \
+        (void)cpu; \
+        (void)emu; \
+ \
+        /* TODO: Define tmp and result in op's scope instead. */ \
+        (void)tmp; \
+        (void)result; \
+ \
+        op; \
+    }
+
+MN_CPU_OP(00, {
+    /* BRK */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 7;
+            break;
+        case 2:
+            cpu->pc++;
+            break;
+        case 3:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
+            cpu->s--;
+            cpu->p |= MN_CPU_B;
+            break;
+        case 4:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
+            cpu->s--;
+            cpu->is_irq = 1;
+            if(cpu->should_nmi){
+                cpu->is_irq = 0;
+                cpu->should_nmi = 0;
+            }
+            break;
+        case 5:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->p);
+            cpu->s--;
+            break;
+        case 6:
+            cpu->pc &= 0xFF00;
+            cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFE : 0xFFFA);
+            break;
+        case 7:
+            cpu->pc &= 0xFF;
+            cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFF : 0xFFFB)<<8;
+            if(!cpu->is_irq) cpu->should_nmi = 0;
+            break;
+    }
+})
+
+MN_CPU_OP(40, {
+    /* RTI */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 6;
+            break;
+        case 3:
+            cpu->s++;
+            break;
+        case 4:
+            cpu->p = MN_CPU_READ(0x0100+cpu->s);
+            cpu->s++;
+            break;
+        case 5:
+            cpu->pc &= 0xFF00;
+            cpu->pc |= MN_CPU_READ(0x0100+cpu->s);
+            cpu->s++;
+            break;
+        case 6:
+            cpu->pc &= 0xFF;
+            cpu->pc |= MN_CPU_READ(0x0100+cpu->s)<<8;
+            break;
+    }
+})
+
+MN_CPU_OP(60, {
+    /* RTS */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 6;
+            break;
+        case 3:
+            cpu->s++;
+            break;
+        case 4:
+            cpu->pc &= 0xFF00;
+            cpu->pc |= MN_CPU_READ(0x0100+cpu->s);
+            cpu->s++;
+            break;
+        case 5:
+            cpu->pc &= 0xFF;
+            cpu->pc |= MN_CPU_READ(0x0100+cpu->s)<<8;
+            break;
+        case 6:
+            cpu->pc++;
+    }
+})
+
+MN_CPU_OP(48, {
+    /* PHA */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 3;
+            break;
+        case 3:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->a);
+            cpu->s--;
+            break;
+    }
+})
+
+MN_CPU_OP(08, {
+    /* PHP */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 3;
+            break;
+        case 3:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->p|(1<<5)|MN_CPU_B);
+            cpu->s--;
+            break;
+    }
+})
+
+MN_CPU_OP(68, {
+    /* PLA */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 4;
+            break;
+        case 3:
+            cpu->s++;
+            break;
+        case 4:
+            cpu->a = MN_CPU_READ(0x0100+cpu->s);
+
+            MN_CPU_UPDATE_NZ(cpu->a);
+            break;
+    }
+})
+
+MN_CPU_OP(28, {
+    /* PLP */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 4;
+            break;
+        case 3:
+            cpu->s++;
+            break;
+        case 4:
+            cpu->p = MN_CPU_READ(0x0100+cpu->s)&~MN_CPU_B;
+            break;
+    }
+})
+
+MN_CPU_OP(20, {
+    /* JSR */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 6;
+            break;
+        case 2:
+            cpu->pc++;
+            break;
+        case 4:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
+            cpu->s--;
+            break;
+        case 5:
+            MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
+            cpu->s--;
+            break;
+        case 6:
+            cpu->pc = cpu->t|(MN_CPU_READ(cpu->pc)<<8);
+            break;
+    }
+})
+
+/* Official opcodes with implied or accumulator addressing */
+
+/* NOTE: The CPU cycle number is always equal or bigger to 2 when
+ * reaching this switch. */
+
+MN_CPU_OP(0A, {
+    /* ASL */
+    MN_CPU_IMP({
+        MN_CPU_ASL(cpu->a);
+    });
+})
+
+MN_CPU_OP(18, {
+    /* CLC */
+    MN_CPU_IMP({
+        cpu->p &= ~MN_CPU_C;
+    });
+})
+
+MN_CPU_OP(2A, {
+    /* ROL */
+    MN_CPU_IMP({
+        MN_CPU_ROL(cpu->a);
+    });
+})
+
+MN_CPU_OP(38, {
+    /* SEC */
+    MN_CPU_IMP({
+        cpu->p |= MN_CPU_C;
+    });
+})
+
+MN_CPU_OP(4A, {
+    /* LSR */
+    MN_CPU_IMP({
+        MN_CPU_LSR(cpu->a);
+    });
+})
+
+MN_CPU_OP(58, {
+    /* CLI */
+    MN_CPU_IMP({
+        cpu->p &= ~MN_CPU_I;
+    });
+})
+
+MN_CPU_OP(6A, {
+    /* ROR */
+    MN_CPU_IMP({
+        MN_CPU_ROR(cpu->a);
+    });
+})
+
+MN_CPU_OP(78, {
+    /* SEI */
+    MN_CPU_IMP({
+        cpu->p |= MN_CPU_I;
+    });
+})
+
+MN_CPU_OP(88, {
+    /* DEY */
+    MN_CPU_IMP({
+        cpu->y--;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(8A, {
+    /* TXA */
+    MN_CPU_IMP({
+        cpu->a = cpu->x;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(98, {
+    /* TYA */
+    MN_CPU_IMP({
+        cpu->a = cpu->y;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(9A, {
+    /* TXS */
+    MN_CPU_IMP({
+        cpu->s = cpu->x;
+    });
+})
+
+MN_CPU_OP(A8, {
+    /* TAY */
+    MN_CPU_IMP({
+        cpu->y = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(AA, {
+    /* TAX */
+    MN_CPU_IMP({
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(B8, {
+    /* CLV */
+    MN_CPU_IMP({
+        cpu->p &= ~MN_CPU_V;
+    });
+})
+
+MN_CPU_OP(BA, {
+    /* TSX */
+    MN_CPU_IMP({
+        cpu->x = cpu->s;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(C8, {
+    /* INY */
+    MN_CPU_IMP({
+        cpu->y++;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(CA, {
+    /* DEX */
+    MN_CPU_IMP({
+        cpu->x--;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(D8, {
+    /* CLD */
+    MN_CPU_IMP({
+        cpu->p &= ~MN_CPU_D;
+    });
+})
+
+MN_CPU_OP(E8, {
+    /* INX */
+    MN_CPU_IMP({
+        cpu->x++;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(EA, {
+    /* NOP */
+    MN_CPU_IMP({
+        /* Do nothing */
+    });
+})
+
+MN_CPU_OP(F8, {
+    /* SED */
+    MN_CPU_IMP({
+        cpu->p |= MN_CPU_D;
+    });
+})
+
+/* Opcodes with immediate addressing */
+
+MN_CPU_OP(09, {
+    /* ORA */
+    MN_CPU_IMM({
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(29, {
+    /* AND */
+    MN_CPU_IMM({
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(49, {
+    /* EOR */
+    MN_CPU_IMM({
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(69, {
+    /* ADC */
+    MN_CPU_IMM({
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(A0, {
+    /* LDY */
+    MN_CPU_IMM({
+        cpu->y = cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(A2, {
+    /* LDX */
+    MN_CPU_IMM({
+        cpu->x = cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(A9, {
+    /* LDA */
+    MN_CPU_IMM({
+        cpu->a = cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(C0, {
+    /* CPY */
+    MN_CPU_IMM({
+        MN_CPU_CMP(cpu->y, cpu->t);
+    });
+})
+
+MN_CPU_OP(C9, {
+    /* CMP */
+    MN_CPU_IMM({
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(E0, {
+    /* CPX */
+    MN_CPU_IMM({
+        MN_CPU_CMP(cpu->x, cpu->t);
+    });
+})
+
+/* NOTE: According to No More Secrets, it [$EB] is the same [as $E9], said
+ * Fiskbit on the NesDev Discord. */
+MN_CPU_OP(E9_EB, {
+    /* SBC */
+    MN_CPU_IMM({
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* Absolute addressing */
+
+MN_CPU_OP(4C, {
+    /* JMP */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 3;
+            break;
+        case 2:
+            cpu->pc++;
+            break;
+        case 3:
+            tmp = MN_CPU_READ(cpu->pc);
+            cpu->pc = cpu->t|(tmp<<8);
+            break;
+    }
+})
+
+/* Absolute addressing - read instructions */
+
+MN_CPU_OP(0D, {
+    /* ORA */
+    MN_CPU_ABS_READ({
+        cpu->a |= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(2C, {
+    /* BIT */
+    MN_CPU_ABS_READ({
+        MN_CPU_BIT(tmp);
+    });
+})
+
+MN_CPU_OP(2D, {
+    /* AND */
+    MN_CPU_ABS_READ({
+        cpu->a &= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(4D, {
+    /* EOR */
+    MN_CPU_ABS_READ({
+        cpu->a ^= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(6D, {
+    /* ADC */
+    MN_CPU_ABS_READ({
+        MN_CPU_ADC(tmp);
+    });
+})
+
+MN_CPU_OP(AC, {
+    /* LDY */
+    MN_CPU_ABS_READ({
+        cpu->y = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(AD, {
+    /* LDA */
+    MN_CPU_ABS_READ({
+        cpu->a = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(AE, {
+    /* LDX */
+    MN_CPU_ABS_READ({
+        cpu->x = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(CC, {
+    /* CPY */
+    MN_CPU_ABS_READ({
+        MN_CPU_CMP(cpu->y, tmp);
+    });
+})
+
+MN_CPU_OP(CD, {
+    /* CMP */
+    MN_CPU_ABS_READ({
+        MN_CPU_CMP(cpu->a, tmp);
+    });
+})
+
+MN_CPU_OP(EC, {
+    /* CPX */
+    MN_CPU_ABS_READ({
+        MN_CPU_CMP(cpu->x, tmp);
+    });
+})
+
+MN_CPU_OP(ED, {
+    /* SBC */
+    MN_CPU_ABS_READ({
+        MN_CPU_SBC(tmp);
+        break;
+    });
+})
+
+/* Absolute addressing - read-modify-write (RMW) instructions */
+
+MN_CPU_OP(0E, {
+    /* ASL */
+    MN_CPU_ABS_RMW({
+        MN_CPU_ASL(cpu->t);
+    });
+})
+
+MN_CPU_OP(2E, {
+    /* ROL */
+    MN_CPU_ABS_RMW({
+        MN_CPU_ROL(cpu->t);
+    });
+})
+
+MN_CPU_OP(4E, {
+    /* LSR */
+    MN_CPU_ABS_RMW({
+        MN_CPU_LSR(cpu->t);
+    });
+})
+
+MN_CPU_OP(6E, {
+    /* ROR */
+    MN_CPU_ABS_RMW({
+        MN_CPU_ROR(cpu->t);
+    });
+})
+
+MN_CPU_OP(CE, {
+    /* DEC */
+    MN_CPU_ABS_RMW({
+        cpu->t--;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+MN_CPU_OP(EE, {
+    /* INC */
+    MN_CPU_ABS_RMW({
+        cpu->t++;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+/* Absolute addressing - write instructions */
+
+MN_CPU_OP(8C, {
+    /* STY */
+    MN_CPU_ABS_STORE({
+        tmp = cpu->y;
+    });
+})
+
+MN_CPU_OP(8D, {
+    /* STA */
+    MN_CPU_ABS_STORE({
+        tmp = cpu->a;
+    });
+})
+
+MN_CPU_OP(8E, {
+    /* STX */
+    MN_CPU_ABS_STORE({
+        tmp = cpu->x;
+    });
+})
+
+/* Zeropage addressing */
+
+/* Zeropage addressing - read instructions */
+
+MN_CPU_OP(05, {
+    /* ORA */
+    MN_CPU_ZP_READ({
+        cpu->a |= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(24, {
+    /* BIT */
+    MN_CPU_ZP_READ({
+        MN_CPU_BIT(tmp);
+    });
+})
+
+MN_CPU_OP(25, {
+    /* AND */
+    MN_CPU_ZP_READ({
+        cpu->a &= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(45, {
+    /* EOR */
+    MN_CPU_ZP_READ({
+        cpu->a ^= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(65, {
+    /* ADC */
+    MN_CPU_ZP_READ({
+        MN_CPU_ADC(tmp);
+    });
+})
+
+MN_CPU_OP(A4, {
+    /* LDY */
+    MN_CPU_ZP_READ({
+        cpu->y = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(A5, {
+    /* LDA */
+    MN_CPU_ZP_READ({
+        cpu->a = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(A6, {
+    /* LDX */
+    MN_CPU_ZP_READ({
+        cpu->x = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+MN_CPU_OP(C4, {
+    /* CPY */
+    MN_CPU_ZP_READ({
+        MN_CPU_CMP(cpu->y, tmp);
+    });
+})
+
+MN_CPU_OP(C5, {
+    /* CMP */
+    MN_CPU_ZP_READ({
+        MN_CPU_CMP(cpu->a, tmp);
+    });
+})
+
+MN_CPU_OP(E4, {
+    /* CPX */
+    MN_CPU_ZP_READ({
+        MN_CPU_CMP(cpu->x, tmp);
+    });
+})
+
+MN_CPU_OP(E5, {
+    /* SBC */
+    MN_CPU_ZP_READ({
+        MN_CPU_SBC(tmp);
+    });
+})
+
+/* Zeropage addressing - RMW instructions */
+
+MN_CPU_OP(06, {
+    /* ASL */
+    MN_CPU_ZP_RMW({
+        MN_CPU_ASL(cpu->t);
+    });
+})
+
+MN_CPU_OP(26, {
+    /* ROL */
+    MN_CPU_ZP_RMW({
+        MN_CPU_ROL(cpu->t);
+    });
+})
+
+MN_CPU_OP(46, {
+    /* LSR */
+    MN_CPU_ZP_RMW({
+        MN_CPU_LSR(cpu->t);
+    });
+})
+
+MN_CPU_OP(66, {
+    /* ROR */
+    MN_CPU_ZP_RMW({
+        MN_CPU_ROR(cpu->t);
+    });
+})
+
+MN_CPU_OP(C6, {
+    /* DEC */
+    MN_CPU_ZP_RMW({
+        cpu->t--;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+MN_CPU_OP(E6, {
+    /* INC */
+    MN_CPU_ZP_RMW({
+        cpu->t++;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+/* Zeropage addressing - write instructions */
+
+MN_CPU_OP(84, {
+    /* STY */
+    MN_CPU_ZP_STORE({
+        tmp = cpu->y;
+    });
+})
+
+MN_CPU_OP(85, {
+    /* STA */
+    MN_CPU_ZP_STORE({
+        tmp = cpu->a;
+    });
+})
+
+MN_CPU_OP(86, {
+    /* STX */
+    MN_CPU_ZP_STORE({
+        tmp = cpu->x;
+    });
+})
+
+/* Indexed zeropage addressing */
+
+/* Indexed zeropage addressing - read instructions */
+
+/* Indexed with X */
+
+MN_CPU_OP(15, {
+    /* ORA */
+    MN_CPU_ZPI_READ(cpu->x, {
+        cpu->a |= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(35, {
+    /* AND */
+    MN_CPU_ZPI_READ(cpu->x, {
+        cpu->a &= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(55, {
+    /* EOR */
+    MN_CPU_ZPI_READ(cpu->x, {
+        cpu->a ^= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(75, {
+    /* ADC */
+    MN_CPU_ZPI_READ(cpu->x, {
+        MN_CPU_ADC(tmp);
+    });
+})
+
+MN_CPU_OP(B4, {
+    /* LDY */
+    MN_CPU_ZPI_READ(cpu->x, {
+        cpu->y = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+MN_CPU_OP(B5, {
+    /* LDA */
+    MN_CPU_ZPI_READ(cpu->x, {
+        cpu->a = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(D5, {
+    /* CMP */
+    MN_CPU_ZPI_READ(cpu->x, {
+        MN_CPU_CMP(cpu->a, tmp);
+    });
+})
+
+MN_CPU_OP(F5, {
+    /* SBC */
+    MN_CPU_ZPI_READ(cpu->x, {
+        MN_CPU_SBC(tmp);
+    });
+})
+
+/* Indexed with Y */
+
+MN_CPU_OP(B6, {
+    /* LDX */
+    MN_CPU_ZPI_READ(cpu->y, {
+        cpu->x = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+/* Indexed zeropage addressing - RMW instructions */
+
+MN_CPU_OP(16, {
+    /* ASL */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_ASL(cpu->t);
+    });
+})
+
+MN_CPU_OP(36, {
+    /* ROL */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_ROL(cpu->t);
+    });
+})
+
+MN_CPU_OP(56, {
+    /* LSR */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_LSR(cpu->t);
+    });
+})
+
+MN_CPU_OP(76, {
+    /* ROR */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_ROR(cpu->t);
+    });
+})
+
+MN_CPU_OP(D6, {
+    /* DEC */
+    MN_CPU_ZPI_RMW({
+        cpu->t--;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+MN_CPU_OP(F6, {
+    /* INC */
+    MN_CPU_ZPI_RMW({
+        cpu->t++;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+/* Indexed zeropage addressing - write instructions */
+
+/* Indexed with X */
+
+MN_CPU_OP(94, {
+    /* STY */
+    MN_CPU_ZPI_STORE(cpu->x, {
+        tmp = cpu->y;
+    });
+})
+
+MN_CPU_OP(95, {
+    /* STA */
+    MN_CPU_ZPI_STORE(cpu->x, {
+        tmp = cpu->a;
+    });
+})
+
+/* Indexed with Y */
+
+MN_CPU_OP(96, {
+    /* STX */
+    MN_CPU_ZPI_STORE(cpu->y, {
+        tmp = cpu->x;
+    });
+})
+
+/* Absolute indexed addressing */
+
+/* Absolute indexed addressing - read instructions */
+
+/* Indexed with X */
+
+MN_CPU_OP(BC, {
+    /* LDY */
+    MN_CPU_ABSI_READ(cpu->x, {
+        cpu->y = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->y);
+    });
+})
+
+/* Indexed with X or Y */
+
+MN_CPU_OP(19_1D, {
+    /* ORA */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        cpu->a |= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(39_3D, {
+    /* AND */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        cpu->a &= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(59_5D, {
+    /* EOR */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        cpu->a ^= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(79_7D, {
+    /* ADC */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        MN_CPU_ADC(tmp);
+    });
+})
+
+MN_CPU_OP(B9_BD, {
+    /* LDA */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        cpu->a = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(D9_DD, {
+    /* CMP */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        MN_CPU_CMP(cpu->a, tmp);
+    });
+})
+
+MN_CPU_OP(F9_FD, {
+    /* SBC */
+    MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        MN_CPU_SBC(tmp);
+    });
+})
+
+/* Indexed with Y */
+
+MN_CPU_OP(BE, {
+    /* LDX */
+    MN_CPU_ABSI_READ(cpu->y, {
+        cpu->x = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+/* Absolute addressing - RMW instructions */
+
+MN_CPU_OP(1E, {
+    /* ASL */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_ASL(cpu->t);
+    });
+})
+
+MN_CPU_OP(3E, {
+    /* ROL */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_ROL(cpu->t);
+    });
+})
+
+MN_CPU_OP(5E, {
+    /* LSR */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_LSR(cpu->t);
+    });
+})
+
+MN_CPU_OP(7E, {
+    /* ROR */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_ROR(cpu->t);
+    });
+})
+
+MN_CPU_OP(DE, {
+    /* DEC */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        cpu->t--;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+MN_CPU_OP(FE, {
+    /* INC */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        cpu->t++;
+
+        MN_CPU_UPDATE_NZ(cpu->t);
+    });
+})
+
+/* Absolute addressing - write instructions */
+
+MN_CPU_OP(99_9D, {
+    /* STA */
+    MN_CPU_ABSI_STORE(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
+        tmp = cpu->a;
+    });
+})
+
+/* Relative addressing */
+
+MN_CPU_OP(10, {
+    /* BPL */
+    MN_CPU_RELATIVE(!(cpu->p&MN_CPU_N));
+})
+
+MN_CPU_OP(30, {
+    /* BMI */
+    MN_CPU_RELATIVE(cpu->p&MN_CPU_N);
+})
+
+MN_CPU_OP(50, {
+    /* BVC */
+    MN_CPU_RELATIVE(!(cpu->p&MN_CPU_V));
+})
+
+MN_CPU_OP(70, {
+    /* BVS */
+    MN_CPU_RELATIVE(cpu->p&MN_CPU_V);
+})
+
+MN_CPU_OP(90, {
+    /* BCC */
+    MN_CPU_RELATIVE(!(cpu->p&MN_CPU_C));
+})
+
+MN_CPU_OP(B0, {
+    /* BCS */
+    MN_CPU_RELATIVE(cpu->p&MN_CPU_C);
+})
+
+MN_CPU_OP(D0, {
+    /* BNE */
+    MN_CPU_RELATIVE(!(cpu->p&MN_CPU_Z));
+})
+
+MN_CPU_OP(F0, {
+    /* BEQ */
+    MN_CPU_RELATIVE(cpu->p&MN_CPU_Z);
+})
+
+/* Indexed indirect addressing */
+
+/* Indexed indirect addressing - read instructions */
+
+MN_CPU_OP(01, {
+    /* ORA */
+    MN_CPU_IDXIND_READ({
+        cpu->a |= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(21, {
+    /* AND */
+    MN_CPU_IDXIND_READ({
+        cpu->a &= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(41, {
+    /* EOR */
+    MN_CPU_IDXIND_READ({
+        cpu->a ^= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(61, {
+    /* ADC */
+    MN_CPU_IDXIND_READ({
+        MN_CPU_ADC(tmp);
+    });
+})
+
+MN_CPU_OP(A1, {
+    /* LDA */
+    MN_CPU_IDXIND_READ({
+        cpu->a = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(C1, {
+    /* CMP */
+    MN_CPU_IDXIND_READ({
+        MN_CPU_CMP(cpu->a, tmp);
+    });
+})
+
+MN_CPU_OP(E1, {
+    /* SBC */
+    MN_CPU_IDXIND_READ({
+        MN_CPU_SBC(tmp);
+    });
+})
+
+/* Indexed indirect addressing - Write instructions */
+
+MN_CPU_OP(81, {
+    /* STA */
+    MN_CPU_IDXIND_STORE({
+        tmp = cpu->a;
+    });
+})
+
+/* Indirect indexed addressing */
+
+/* Indirect indexed addressing - Read instructions */
+
+MN_CPU_OP(11, {
+    /* ORA */
+    MN_CPU_INDIDX_READ({
+        cpu->a |= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(31, {
+    /* AND */
+    MN_CPU_INDIDX_READ({
+        cpu->a &= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(51, {
+    /* EOR */
+    MN_CPU_INDIDX_READ({
+        cpu->a ^= tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(71, {
+    /* ADC */
+    MN_CPU_INDIDX_READ({
+        MN_CPU_ADC(tmp);
+    });
+})
+
+MN_CPU_OP(B1, {
+    /* LDA */
+    MN_CPU_INDIDX_READ({
+        cpu->a = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(D1, {
+    /* CMP */
+    MN_CPU_INDIDX_READ({
+        MN_CPU_CMP(cpu->a, tmp);
+    });
+})
+
+MN_CPU_OP(F1, {
+    /* SBC */
+    MN_CPU_INDIDX_READ({
+        MN_CPU_SBC(tmp);
+    });
+})
+
+/* Indirect indexed addressing - write instructions */
+
+MN_CPU_OP(91, {
+    /* STA */
+    MN_CPU_INDIDX_STORE({
+        tmp = cpu->a;
+    });
+})
+
+/* Indirect absolute addressing */
+
+MN_CPU_OP(6C, {
+    /* JMP */
+    switch(cpu->cycle){
+        case 1:
+            cpu->target_cycle = 5;
+            break;
+        case 2:
+            cpu->pc++;
+            break;
+        case 3:
+            cpu->tmp = MN_CPU_READ(cpu->pc)<<8;
+            cpu->tmp |= cpu->t;
+            cpu->pc++;
+            break;
+        case 4:
+            cpu->t = MN_CPU_READ(cpu->tmp);
+            break;
+        case 5:
+            cpu->pc = MN_CPU_READ((cpu->tmp&0xFF00)|
+                                  ((cpu->tmp+1)&0xFF))<<8;
+            cpu->pc |= cpu->t;
+            break;
+    }
+})
+
+/* Unofficial opcodes */
+
+/* Implied addressing */
+
+MN_CPU_OP(1A_NOP, {
+    /* NOP */
+    MN_CPU_IMP({
+        /* Do nothing */
+    });
+})
+
+/* Immediate addressing */
+
+MN_CPU_OP(80_NOP, {
+    /* NOP */
+    MN_CPU_IMM({
+        /* Do nothing */
+    });
+})
+
+MN_CPU_OP(AB, {
+    /* LAX */
+    MN_CPU_IMM({
+        cpu->a = cpu->t;
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(0B_2B, {
+    /* ANC */
+    MN_CPU_IMM({
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+        cpu->p &= ~MN_CPU_C;
+        cpu->p |= (cpu->p>>7)&1;
+    });
+})
+
+MN_CPU_OP(4B, {
+    /* ALR */
+    MN_CPU_IMM({
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+        MN_CPU_LSR(cpu->a);
+    });
+})
+
+MN_CPU_OP(6B, {
+    /* ARR */
+    /* TODO: Fix this opcode, the overflow flag is incorrect after
+     * execution */
+    MN_CPU_IMM({
+        cpu->a &= cpu->t;
+        tmp = cpu->a;
+        MN_CPU_ROR(cpu->a);
+
+        cpu->p &= ~(1<<7);
+        cpu->p |= cpu->a&(1<<7);
+
+        if(cpu->a) cpu->p &= ~MN_CPU_Z;
+        else cpu->p |= MN_CPU_Z;
+
+        cpu->p &= ~MN_CPU_V;
+        cpu->p |= (tmp^(cpu->a<<1))&(1<<6);
+    });
+})
+
+MN_CPU_OP(8B, {
+    /* XAA */
+    /* TODO: Make it a bit broken to be closer to the expected
+     * behaviour :D */
+    MN_CPU_IMM({
+        cpu->a = cpu->x;
+        cpu->a &= cpu->t;
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(CB, {
+    /* AXS */
+    MN_CPU_IMM({
+        MN_CPU_CMP(cpu->a&cpu->x, cpu->t);
+        cpu->x = (cpu->a&cpu->x)-cpu->t;
+        MN_CPU_UPDATE_NZ(cpu->x);
+    });
+})
+
+/* Absolute addressing */
+
+MN_CPU_OP(0C_3C, {
+    /* NOP */
+    MN_CPU_ABS_READ({
+        /* Do nothing */
+    });
+})
+
+MN_CPU_OP(AF, {
+    /* LAX */
+    MN_CPU_ABS_READ({
+        /* XXX: Is LAX performing only one or two reads? */
+        cpu->a = tmp;
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(8F, {
+    /* SAX */
+    /* NOTE: Apparently it is unstable on the NES */
+    MN_CPU_ABS_STORE({
+        tmp = cpu->a&cpu->x;
+    });
+})
+
+MN_CPU_OP(0F, {
+    /* SLO */
+    MN_CPU_ABS_RMW({
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(2F, {
+    /* RLA */
+    MN_CPU_ABS_RMW({
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(4F, {
+    /* SRE */
+    MN_CPU_ABS_RMW({
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(6F, {
+    /* RRA */
+    MN_CPU_ABS_RMW({
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(CF, {
+    /* DCP */
+    MN_CPU_ABS_RMW({
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(EF, {
+    /* ISC */
+    MN_CPU_ABS_RMW({
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* Indexed absolute addressing */
+
+/* With X */
+
+MN_CPU_OP(1C_NOP, {
+    /* NOP */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        /* Do nothing */
+    });
+})
+
+MN_CPU_OP(1F, {
+    /* SLO */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(3F, {
+    /* RLA */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(5F, {
+    /* SRE */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(7F, {
+    /* RRA */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(9C, {
+    /* SHY */
+    MN_CPU_ABSI_SH(cpu->x, {
+        tmp = cpu->y;
+        if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+    });
+})
+
+MN_CPU_OP(DF, {
+    /* DCP */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(FF, {
+    /* ISC */
+    MN_CPU_ABSI_RMW(cpu->x, {
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* With Y */
+
+MN_CPU_OP(1B, {
+    /* SLO */
+    MN_CPU_ABSI_RMW(cpu->y, {
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(3B, {
+    /* RLA */
+    MN_CPU_ABSI_RMW(cpu->y, {
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(5B, {
+    /* SRE */
+    MN_CPU_ABSI_RMW(cpu->y, {
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(7B, {
+    /* RRA */
+    MN_CPU_ABSI_RMW(cpu->y, {
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(9B, {
+    /* TAS */
+    MN_CPU_ABSI_SH(cpu->y, {
+        cpu->s = cpu->a&cpu->x;
+        tmp = cpu->s;
+        if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+    });
+})
+
+MN_CPU_OP(9F, {
+    /* AHX */
+    MN_CPU_ABSI_SH(cpu->y, {
+        tmp = cpu->a&cpu->x;
+        if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+    });
+})
+
+MN_CPU_OP(9E, {
+    /* SHX */
+    MN_CPU_ABSI_SH(cpu->y, {
+        tmp = cpu->x;
+        if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+    });
+})
+
+MN_CPU_OP(BB, {
+    /* LAS */
+    MN_CPU_ABSI_READ(cpu->y, {
+        cpu->a = tmp&cpu->s;
+        cpu->x = cpu->a;
+        cpu->s = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(BF, {
+    /* LAX */
+    MN_CPU_ABSI_READ(cpu->y, {
+        cpu->a = tmp;
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(DB, {
+    /* DCP */
+    MN_CPU_ABSI_RMW(cpu->y, {
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(FB, {
+    /* ISC */
+    MN_CPU_ABSI_RMW(cpu->y, {
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* Zeropage addressing */
+
+MN_CPU_OP(04_NOP, {
+    /* NOP */
+    MN_CPU_ZP_READ({
+        /* Do nothing */
+    });
+})
+
+MN_CPU_OP(A7, {
+    /* LAX */
+    MN_CPU_ZP_READ({
+        cpu->a = tmp;
+        cpu->x = tmp;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(87, {
+    /* SAX */
+    /* NOTE: Apparently it is unstable on the NES */
+    MN_CPU_ZP_STORE({
+        tmp = cpu->a&cpu->x;
+    });
+})
+
+MN_CPU_OP(07, {
+    /* SLO */
+    MN_CPU_ZP_RMW({
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(27, {
+    /* RLA */
+    MN_CPU_ZP_RMW({
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(47, {
+    /* SRE */
+    MN_CPU_ZP_RMW({
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(67, {
+    /* RRA */
+    MN_CPU_ZP_RMW({
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(C7, {
+    /* DCP */
+    MN_CPU_ZP_RMW({
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(E7, {
+    /* ISC */
+    MN_CPU_ZP_RMW({
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* Indexed zeropage addressing */
+
+/* With X */
+
+MN_CPU_OP(14_NOP, {
+    /* NOP */
+    MN_CPU_ZPI_READ(cpu->x, {
+        /* Do nothing */
+    });
+})
+
+MN_CPU_OP(17, {
+    /* SLO */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(37, {
+    /* RLA */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(57, {
+    /* SRE */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(77, {
+    /* RRA */
+    MN_CPU_ZPI_RMW({
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(D7, {
+    /* DCP */
+    MN_CPU_ZPI_RMW({
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(F7, {
+    /* ISC */
+    MN_CPU_ZPI_RMW({
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* With Y */
+
+MN_CPU_OP(97, {
+    /* SAX */
+    /* NOTE: Apparently it is unstable on the NES */
+    MN_CPU_ZPI_STORE(cpu->y, {
+        tmp = cpu->a&cpu->x;
+    });
+})
+
+MN_CPU_OP(B7, {
+    /* LAX */
+    MN_CPU_ZPI_READ(cpu->y, {
+        cpu->a = tmp;
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+/* Indexed indirect addressing */
+
+MN_CPU_OP(03, {
+    /* SLO */
+    MN_CPU_IDXIND_RMW({
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(23, {
+    /* RLA */
+    MN_CPU_IDXIND_RMW({
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(43, {
+    /* SRE */
+    MN_CPU_IDXIND_RMW({
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(63, {
+    /* RRA */
+    MN_CPU_IDXIND_RMW({
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(83, {
+    /* SAX */
+    /* NOTE: Apparently it is unstable on the NES */
+    MN_CPU_IDXIND_STORE({
+        tmp = cpu->a&cpu->x;
+    });
+})
+
+MN_CPU_OP(A3, {
+    /* LAX */
+    MN_CPU_IDXIND_READ({
+        cpu->a = tmp;
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(C3, {
+    /* DCP */
+    MN_CPU_IDXIND_RMW({
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(E3, {
+    /* ISC */
+    MN_CPU_IDXIND_RMW({
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* Indirect indexed addressing */
+
+MN_CPU_OP(13, {
+    /* SLO */
+    MN_CPU_INDIDX_RMW({
+        MN_CPU_ASL(cpu->t);
+        cpu->a |= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(33, {
+    /* RLA */
+    MN_CPU_INDIDX_RMW({
+        MN_CPU_ROL(cpu->t);
+        cpu->a &= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(53, {
+    /* SRE */
+    MN_CPU_INDIDX_RMW({
+        MN_CPU_LSR(cpu->t);
+        cpu->a ^= cpu->t;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(73, {
+    /* RRA */
+    MN_CPU_INDIDX_RMW({
+        MN_CPU_ROR(cpu->t);
+        MN_CPU_ADC(cpu->t);
+    });
+})
+
+MN_CPU_OP(93, {
+    /* AHX */
+    MN_CPU_INDIDX_SH({
+        tmp = cpu->a&cpu->x;
+        if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
+    });
+})
+
+MN_CPU_OP(B3, {
+    /* LAX */
+    MN_CPU_INDIDX_READ({
+        cpu->a = tmp;
+        cpu->x = cpu->a;
+
+        MN_CPU_UPDATE_NZ(cpu->a);
+    });
+})
+
+MN_CPU_OP(D3, {
+    /* DCP */
+    MN_CPU_INDIDX_RMW({
+        cpu->t--;
+        MN_CPU_CMP(cpu->a, cpu->t);
+    });
+})
+
+MN_CPU_OP(F3, {
+    /* ISC */
+    MN_CPU_INDIDX_RMW({
+        cpu->t++;
+        MN_CPU_SBC(cpu->t);
+    });
+})
+
+/* STP */
+
+MN_CPU_OP(X2, {
+    /* STP */
+    /* TODO: Check if I'm emulating it accurately */
+    cpu->jammed = 1;
+})
+
+static void (*opcode_lut[256])(MNCPU *cpu, MNEmu *emu) = {
+    mn_cpu_opcode_00,
+    mn_cpu_opcode_01,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_03,
+    mn_cpu_opcode_04_NOP,
+    mn_cpu_opcode_05,
+    mn_cpu_opcode_06,
+    mn_cpu_opcode_07,
+    mn_cpu_opcode_08,
+    mn_cpu_opcode_09,
+    mn_cpu_opcode_0A,
+    mn_cpu_opcode_0B_2B,
+    mn_cpu_opcode_0C_3C,
+    mn_cpu_opcode_0D,
+    mn_cpu_opcode_0E,
+    mn_cpu_opcode_0F,
+    mn_cpu_opcode_10,
+    mn_cpu_opcode_11,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_13,
+    mn_cpu_opcode_14_NOP,
+    mn_cpu_opcode_15,
+    mn_cpu_opcode_16,
+    mn_cpu_opcode_17,
+    mn_cpu_opcode_18,
+    mn_cpu_opcode_19_1D,
+    mn_cpu_opcode_1A_NOP,
+    mn_cpu_opcode_1B,
+    mn_cpu_opcode_1C_NOP,
+    mn_cpu_opcode_19_1D,
+    mn_cpu_opcode_1E,
+    mn_cpu_opcode_1F,
+    mn_cpu_opcode_20,
+    mn_cpu_opcode_21,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_23,
+    mn_cpu_opcode_24,
+    mn_cpu_opcode_25,
+    mn_cpu_opcode_26,
+    mn_cpu_opcode_27,
+    mn_cpu_opcode_28,
+    mn_cpu_opcode_29,
+    mn_cpu_opcode_2A,
+    mn_cpu_opcode_0B_2B,
+    mn_cpu_opcode_2C,
+    mn_cpu_opcode_2D,
+    mn_cpu_opcode_2E,
+    mn_cpu_opcode_2F,
+    mn_cpu_opcode_30,
+    mn_cpu_opcode_31,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_33,
+    mn_cpu_opcode_14_NOP,
+    mn_cpu_opcode_35,
+    mn_cpu_opcode_36,
+    mn_cpu_opcode_37,
+    mn_cpu_opcode_38,
+    mn_cpu_opcode_39_3D,
+    mn_cpu_opcode_1A_NOP,
+    mn_cpu_opcode_3B,
+    mn_cpu_opcode_0C_3C,
+    mn_cpu_opcode_39_3D,
+    mn_cpu_opcode_3E,
+    mn_cpu_opcode_3F,
+    mn_cpu_opcode_40,
+    mn_cpu_opcode_41,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_43,
+    mn_cpu_opcode_04_NOP,
+    mn_cpu_opcode_45,
+    mn_cpu_opcode_46,
+    mn_cpu_opcode_47,
+    mn_cpu_opcode_48,
+    mn_cpu_opcode_49,
+    mn_cpu_opcode_4A,
+    mn_cpu_opcode_4B,
+    mn_cpu_opcode_4C,
+    mn_cpu_opcode_4D,
+    mn_cpu_opcode_4E,
+    mn_cpu_opcode_4F,
+    mn_cpu_opcode_50,
+    mn_cpu_opcode_51,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_53,
+    mn_cpu_opcode_14_NOP,
+    mn_cpu_opcode_55,
+    mn_cpu_opcode_56,
+    mn_cpu_opcode_57,
+    mn_cpu_opcode_58,
+    mn_cpu_opcode_59_5D,
+    mn_cpu_opcode_1A_NOP,
+    mn_cpu_opcode_5B,
+    mn_cpu_opcode_1C_NOP,
+    mn_cpu_opcode_59_5D,
+    mn_cpu_opcode_5E,
+    mn_cpu_opcode_5F,
+    mn_cpu_opcode_60,
+    mn_cpu_opcode_61,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_63,
+    mn_cpu_opcode_04_NOP,
+    mn_cpu_opcode_65,
+    mn_cpu_opcode_66,
+    mn_cpu_opcode_67,
+    mn_cpu_opcode_68,
+    mn_cpu_opcode_69,
+    mn_cpu_opcode_6A,
+    mn_cpu_opcode_6B,
+    mn_cpu_opcode_6C,
+    mn_cpu_opcode_6D,
+    mn_cpu_opcode_6E,
+    mn_cpu_opcode_6F,
+    mn_cpu_opcode_70,
+    mn_cpu_opcode_71,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_73,
+    mn_cpu_opcode_14_NOP,
+    mn_cpu_opcode_75,
+    mn_cpu_opcode_76,
+    mn_cpu_opcode_77,
+    mn_cpu_opcode_78,
+    mn_cpu_opcode_79_7D,
+    mn_cpu_opcode_1A_NOP,
+    mn_cpu_opcode_7B,
+    mn_cpu_opcode_1C_NOP,
+    mn_cpu_opcode_79_7D,
+    mn_cpu_opcode_7E,
+    mn_cpu_opcode_7F,
+    mn_cpu_opcode_80_NOP,
+    mn_cpu_opcode_81,
+    mn_cpu_opcode_80_NOP,
+    mn_cpu_opcode_83,
+    mn_cpu_opcode_84,
+    mn_cpu_opcode_85,
+    mn_cpu_opcode_86,
+    mn_cpu_opcode_87,
+    mn_cpu_opcode_88,
+    mn_cpu_opcode_80_NOP,
+    mn_cpu_opcode_8A,
+    mn_cpu_opcode_8B,
+    mn_cpu_opcode_8C,
+    mn_cpu_opcode_8D,
+    mn_cpu_opcode_8E,
+    mn_cpu_opcode_8F,
+    mn_cpu_opcode_90,
+    mn_cpu_opcode_91,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_93,
+    mn_cpu_opcode_94,
+    mn_cpu_opcode_95,
+    mn_cpu_opcode_96,
+    mn_cpu_opcode_97,
+    mn_cpu_opcode_98,
+    mn_cpu_opcode_99_9D,
+    mn_cpu_opcode_9A,
+    mn_cpu_opcode_9B,
+    mn_cpu_opcode_9C,
+    mn_cpu_opcode_99_9D,
+    mn_cpu_opcode_9E,
+    mn_cpu_opcode_9F,
+    mn_cpu_opcode_A0,
+    mn_cpu_opcode_A1,
+    mn_cpu_opcode_A2,
+    mn_cpu_opcode_A3,
+    mn_cpu_opcode_A4,
+    mn_cpu_opcode_A5,
+    mn_cpu_opcode_A6,
+    mn_cpu_opcode_A7,
+    mn_cpu_opcode_A8,
+    mn_cpu_opcode_A9,
+    mn_cpu_opcode_AA,
+    mn_cpu_opcode_AB,
+    mn_cpu_opcode_AC,
+    mn_cpu_opcode_AD,
+    mn_cpu_opcode_AE,
+    mn_cpu_opcode_AF,
+    mn_cpu_opcode_B0,
+    mn_cpu_opcode_B1,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_B3,
+    mn_cpu_opcode_B4,
+    mn_cpu_opcode_B5,
+    mn_cpu_opcode_B6,
+    mn_cpu_opcode_B7,
+    mn_cpu_opcode_B8,
+    mn_cpu_opcode_B9_BD,
+    mn_cpu_opcode_BA,
+    mn_cpu_opcode_BB,
+    mn_cpu_opcode_BC,
+    mn_cpu_opcode_B9_BD,
+    mn_cpu_opcode_BE,
+    mn_cpu_opcode_BF,
+    mn_cpu_opcode_C0,
+    mn_cpu_opcode_C1,
+    mn_cpu_opcode_80_NOP,
+    mn_cpu_opcode_C3,
+    mn_cpu_opcode_C4,
+    mn_cpu_opcode_C5,
+    mn_cpu_opcode_C6,
+    mn_cpu_opcode_C7,
+    mn_cpu_opcode_C8,
+    mn_cpu_opcode_C9,
+    mn_cpu_opcode_CA,
+    mn_cpu_opcode_CB,
+    mn_cpu_opcode_CC,
+    mn_cpu_opcode_CD,
+    mn_cpu_opcode_CE,
+    mn_cpu_opcode_CF,
+    mn_cpu_opcode_D0,
+    mn_cpu_opcode_D1,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_D3,
+    mn_cpu_opcode_14_NOP,
+    mn_cpu_opcode_D5,
+    mn_cpu_opcode_D6,
+    mn_cpu_opcode_D7,
+    mn_cpu_opcode_D8,
+    mn_cpu_opcode_D9_DD,
+    mn_cpu_opcode_1A_NOP,
+    mn_cpu_opcode_DB,
+    mn_cpu_opcode_1C_NOP,
+    mn_cpu_opcode_D9_DD,
+    mn_cpu_opcode_DE,
+    mn_cpu_opcode_DF,
+    mn_cpu_opcode_E0,
+    mn_cpu_opcode_E1,
+    mn_cpu_opcode_80_NOP,
+    mn_cpu_opcode_E3,
+    mn_cpu_opcode_E4,
+    mn_cpu_opcode_E5,
+    mn_cpu_opcode_E6,
+    mn_cpu_opcode_E7,
+    mn_cpu_opcode_E8,
+    mn_cpu_opcode_E9_EB,
+    mn_cpu_opcode_EA,
+    mn_cpu_opcode_E9_EB,
+    mn_cpu_opcode_EC,
+    mn_cpu_opcode_ED,
+    mn_cpu_opcode_EE,
+    mn_cpu_opcode_EF,
+    mn_cpu_opcode_F0,
+    mn_cpu_opcode_F1,
+    mn_cpu_opcode_X2,
+    mn_cpu_opcode_F3,
+    mn_cpu_opcode_14_NOP,
+    mn_cpu_opcode_F5,
+    mn_cpu_opcode_F6,
+    mn_cpu_opcode_F7,
+    mn_cpu_opcode_F8,
+    mn_cpu_opcode_F9_FD,
+    mn_cpu_opcode_1A_NOP,
+    mn_cpu_opcode_FB,
+    mn_cpu_opcode_1C_NOP,
+    mn_cpu_opcode_F9_FD,
+    mn_cpu_opcode_FE,
+    mn_cpu_opcode_FF
+};
+
 void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     /* Emulated the 6502 as described at https://www.nesdev.org/6502_cpu.txt
      *
@@ -842,8 +3096,6 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
      * https://www.oxyron.de/html/opcodes02.html
      * https://www.nesdev.org/wiki/Instruction_reference#ADC
      */
-    unsigned char tmp;
-    unsigned short int result;
 
     if(cpu->jammed) return;
     if(cpu->halted){
@@ -922,2031 +3174,12 @@ OPCODE_LOADED:
         return;
     }
 
-    /* XXX: Maybe it would be better to use a LUT. */
     /* TODO: Avoid having so much duplicated code. */
-    switch(cpu->opcode){
-        case 0x00:
-            /* BRK */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 7;
-                    break;
-                case 2:
-                    cpu->pc++;
-                    break;
-                case 3:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
-                    cpu->s--;
-                    cpu->p |= MN_CPU_B;
-                    break;
-                case 4:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
-                    cpu->s--;
-                    cpu->is_irq = 1;
-                    if(cpu->should_nmi){
-                        cpu->is_irq = 0;
-                        cpu->should_nmi = 0;
-                    }
-                    break;
-                case 5:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->p);
-                    cpu->s--;
-                    break;
-                case 6:
-                    cpu->pc &= 0xFF00;
-                    cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFE : 0xFFFA);
-                    break;
-                case 7:
-                    cpu->pc &= 0xFF;
-                    cpu->pc |= MN_CPU_READ(cpu->is_irq ? 0xFFFF : 0xFFFB)<<8;
-                    if(!cpu->is_irq) cpu->should_nmi = 0;
-                    break;
-            }
-            break;
-
-        case 0x40:
-            /* RTI */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 6;
-                    break;
-                case 3:
-                    cpu->s++;
-                    break;
-                case 4:
-                    cpu->p = MN_CPU_READ(0x0100+cpu->s);
-                    cpu->s++;
-                    break;
-                case 5:
-                    cpu->pc &= 0xFF00;
-                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s);
-                    cpu->s++;
-                    break;
-                case 6:
-                    cpu->pc &= 0xFF;
-                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s)<<8;
-                    break;
-            }
-            break;
-
-        case 0x60:
-            /* RTS */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 6;
-                    break;
-                case 3:
-                    cpu->s++;
-                    break;
-                case 4:
-                    cpu->pc &= 0xFF00;
-                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s);
-                    cpu->s++;
-                    break;
-                case 5:
-                    cpu->pc &= 0xFF;
-                    cpu->pc |= MN_CPU_READ(0x0100+cpu->s)<<8;
-                    break;
-                case 6:
-                    cpu->pc++;
-            }
-            break;
-
-        case 0x48:
-            /* PHA */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 3;
-                    break;
-                case 3:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->a);
-                    cpu->s--;
-                    break;
-            }
-            break;
-
-        case 0x08:
-            /* PHP */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 3;
-                    break;
-                case 3:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->p|(1<<5)|MN_CPU_B);
-                    cpu->s--;
-                    break;
-            }
-            break;
-
-        case 0x68:
-            /* PLA */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 4;
-                    break;
-                case 3:
-                    cpu->s++;
-                    break;
-                case 4:
-                    cpu->a = MN_CPU_READ(0x0100+cpu->s);
-
-                    MN_CPU_UPDATE_NZ(cpu->a);
-                    break;
-            }
-            break;
-
-        case 0x28:
-            /* PLP */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 4;
-                    break;
-                case 3:
-                    cpu->s++;
-                    break;
-                case 4:
-                    cpu->p = MN_CPU_READ(0x0100+cpu->s)&~MN_CPU_B;
-                    break;
-            }
-            break;
-
-        case 0x20:
-            /* JSR */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 6;
-                    break;
-                case 2:
-                    cpu->pc++;
-                    break;
-                case 4:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc>>8);
-                    cpu->s--;
-                    break;
-                case 5:
-                    MN_CPU_WRITE(0x0100+cpu->s, cpu->pc);
-                    cpu->s--;
-                    break;
-                case 6:
-                    cpu->pc = cpu->t|(MN_CPU_READ(cpu->pc)<<8);
-                    break;
-            }
-            break;
-
-        /* Official opcodes with implied or accumulator addressing */
-
-        /* NOTE: The CPU cycle number is always equal or bigger to 2 when
-         * reaching this switch. */
-
-        case 0x0A:
-            /* ASL */
-            MN_CPU_IMP({
-                MN_CPU_ASL(cpu->a);
-            });
-            break;
-
-        case 0x18:
-            /* CLC */
-            MN_CPU_IMP({
-                cpu->p &= ~MN_CPU_C;
-            });
-            break;
-
-        case 0x2A:
-            /* ROL */
-            MN_CPU_IMP({
-                MN_CPU_ROL(cpu->a);
-            });
-            break;
-
-        case 0x38:
-            /* SEC */
-            MN_CPU_IMP({
-                cpu->p |= MN_CPU_C;
-            });
-            break;
-
-        case 0x4A:
-            /* LSR */
-            MN_CPU_IMP({
-                MN_CPU_LSR(cpu->a);
-            });
-            break;
-
-        case 0x58:
-            /* CLI */
-            MN_CPU_IMP({
-                cpu->p &= ~MN_CPU_I;
-            });
-            break;
-
-        case 0x6A:
-            /* ROR */
-            MN_CPU_IMP({
-                MN_CPU_ROR(cpu->a);
-            });
-            break;
-
-        case 0x78:
-            /* SEI */
-            MN_CPU_IMP({
-                cpu->p |= MN_CPU_I;
-            });
-            break;
-
-        case 0x88:
-            /* DEY */
-            MN_CPU_IMP({
-                cpu->y--;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0x8A:
-            /* TXA */
-            MN_CPU_IMP({
-                cpu->a = cpu->x;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x98:
-            /* TYA */
-            MN_CPU_IMP({
-                cpu->a = cpu->y;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x9A:
-            /* TXS */
-            MN_CPU_IMP({
-                cpu->s = cpu->x;
-            });
-            break;
-
-        case 0xA8:
-            /* TAY */
-            MN_CPU_IMP({
-                cpu->y = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0xAA:
-            /* TAX */
-            MN_CPU_IMP({
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xB8:
-            /* CLV */
-            MN_CPU_IMP({
-                cpu->p &= ~MN_CPU_V;
-            });
-            break;
-
-        case 0xBA:
-            /* TSX */
-            MN_CPU_IMP({
-                cpu->x = cpu->s;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xC8:
-            /* INY */
-            MN_CPU_IMP({
-                cpu->y++;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0xCA:
-            /* DEX */
-            MN_CPU_IMP({
-                cpu->x--;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xD8:
-            /* CLD */
-            MN_CPU_IMP({
-                cpu->p &= ~MN_CPU_D;
-            });
-            break;
-
-        case 0xE8:
-            /* INX */
-            MN_CPU_IMP({
-                cpu->x++;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xEA:
-            /* NOP */
-            MN_CPU_IMP({
-                /* Do nothing */
-            });
-            break;
-
-        case 0xF8:
-            /* SED */
-            MN_CPU_IMP({
-                cpu->p |= MN_CPU_D;
-            });
-            break;
-
-        /* Opcodes with immediate addressing */
-
-        case 0x09:
-            /* ORA */
-            MN_CPU_IMM({
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x29:
-            /* AND */
-            MN_CPU_IMM({
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x49:
-            /* EOR */
-            MN_CPU_IMM({
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x69:
-            /* ADC */
-            MN_CPU_IMM({
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0xA0:
-            /* LDY */
-            MN_CPU_IMM({
-                cpu->y = cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0xA2:
-            /* LDX */
-            MN_CPU_IMM({
-                cpu->x = cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xA9:
-            /* LDA */
-            MN_CPU_IMM({
-                cpu->a = cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xC0:
-            /* CPY */
-            MN_CPU_IMM({
-                MN_CPU_CMP(cpu->y, cpu->t);
-            });
-            break;
-
-        case 0xC9:
-            /* CMP */
-            MN_CPU_IMM({
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xE0:
-            /* CPX */
-            MN_CPU_IMM({
-                MN_CPU_CMP(cpu->x, cpu->t);
-            });
-            break;
-
-        case 0xEB: /* Unofficial opcode */
-            /* NOTE: According to No More Secrets, it is the same [as $E9],
-             *  said Fiskbit on the NesDev Discord. */
-        case 0xE9:
-            /* SBC */
-            MN_CPU_IMM({
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* Absolute addressing */
-
-        case 0x4C:
-            /* JMP */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 3;
-                    break;
-                case 2:
-                    cpu->pc++;
-                    break;
-                case 3:
-                    tmp = MN_CPU_READ(cpu->pc);
-                    cpu->pc = cpu->t|(tmp<<8);
-                    break;
-            }
-            break;
-
-        /* Absolute addressing - read instructions */
-
-        case 0x0D:
-            /* ORA */
-            MN_CPU_ABS_READ({
-                cpu->a |= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x2C:
-            /* BIT */
-            MN_CPU_ABS_READ({
-                MN_CPU_BIT(tmp);
-            });
-            break;
-
-        case 0x2D:
-            /* AND */
-            MN_CPU_ABS_READ({
-                cpu->a &= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x4D:
-            /* EOR */
-            MN_CPU_ABS_READ({
-                cpu->a ^= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x6D:
-            /* ADC */
-            MN_CPU_ABS_READ({
-                MN_CPU_ADC(tmp);
-            });
-            break;
-
-        case 0xAC:
-            /* LDY */
-            MN_CPU_ABS_READ({
-                cpu->y = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0xAD:
-            /* LDA */
-            MN_CPU_ABS_READ({
-                cpu->a = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xAE:
-            /* LDX */
-            MN_CPU_ABS_READ({
-                cpu->x = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xCC:
-            /* CPY */
-            MN_CPU_ABS_READ({
-                MN_CPU_CMP(cpu->y, tmp);
-            });
-            break;
-
-        case 0xCD:
-            /* CMP */
-            MN_CPU_ABS_READ({
-                MN_CPU_CMP(cpu->a, tmp);
-            });
-            break;
-
-        case 0xEC:
-            /* CPX */
-            MN_CPU_ABS_READ({
-                MN_CPU_CMP(cpu->x, tmp);
-            });
-            break;
-
-        case 0xED:
-            /* SBC */
-            MN_CPU_ABS_READ({
-                MN_CPU_SBC(tmp);
-                break;
-            });
-            break;
-
-        /* Absolute addressing - read-modify-write (RMW) instructions */
-
-        case 0x0E:
-            /* ASL */
-            MN_CPU_ABS_RMW({
-                MN_CPU_ASL(cpu->t);
-            });
-            break;
-
-        case 0x2E:
-            /* ROL */
-            MN_CPU_ABS_RMW({
-                MN_CPU_ROL(cpu->t);
-            });
-            break;
-
-        case 0x4E:
-            /* LSR */
-            MN_CPU_ABS_RMW({
-                MN_CPU_LSR(cpu->t);
-            });
-            break;
-
-        case 0x6E:
-            /* ROR */
-            MN_CPU_ABS_RMW({
-                MN_CPU_ROR(cpu->t);
-            });
-            break;
-
-        case 0xCE:
-            /* DEC */
-            MN_CPU_ABS_RMW({
-                cpu->t--;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        case 0xEE:
-            /* INC */
-            MN_CPU_ABS_RMW({
-                cpu->t++;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        /* Absolute addressing - write instructions */
-
-        case 0x8C:
-            /* STY */
-            MN_CPU_ABS_STORE({
-                tmp = cpu->y;
-            });
-            break;
-
-        case 0x8D:
-            /* STA */
-            MN_CPU_ABS_STORE({
-                tmp = cpu->a;
-            });
-            break;
-
-        case 0x8E:
-            /* STX */
-            MN_CPU_ABS_STORE({
-                tmp = cpu->x;
-            });
-            break;
-
-        /* Zeropage addressing */
-
-        /* Zeropage addressing - read instructions */
-
-        case 0x05:
-            /* ORA */
-            MN_CPU_ZP_READ({
-                cpu->a |= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x24:
-            /* BIT */
-            MN_CPU_ZP_READ({
-                MN_CPU_BIT(tmp);
-            });
-            break;
-
-        case 0x25:
-            /* AND */
-            MN_CPU_ZP_READ({
-                cpu->a &= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x45:
-            /* EOR */
-            MN_CPU_ZP_READ({
-                cpu->a ^= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x65:
-            /* ADC */
-            MN_CPU_ZP_READ({
-                MN_CPU_ADC(tmp);
-            });
-            break;
-
-        case 0xA4:
-            /* LDY */
-            MN_CPU_ZP_READ({
-                cpu->y = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0xA5:
-            /* LDA */
-            MN_CPU_ZP_READ({
-                cpu->a = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xA6:
-            /* LDX */
-            MN_CPU_ZP_READ({
-                cpu->x = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        case 0xC4:
-            /* CPY */
-            MN_CPU_ZP_READ({
-                MN_CPU_CMP(cpu->y, tmp);
-            });
-            break;
-
-        case 0xC5:
-            /* CMP */
-            MN_CPU_ZP_READ({
-                MN_CPU_CMP(cpu->a, tmp);
-            });
-            break;
-
-        case 0xE4:
-            /* CPX */
-            MN_CPU_ZP_READ({
-                MN_CPU_CMP(cpu->x, tmp);
-            });
-            break;
-
-        case 0xE5:
-            /* SBC */
-            MN_CPU_ZP_READ({
-                MN_CPU_SBC(tmp);
-            });
-            break;
-
-        /* Zeropage addressing - RMW instructions */
-
-        case 0x06:
-            /* ASL */
-            MN_CPU_ZP_RMW({
-                MN_CPU_ASL(cpu->t);
-            });
-            break;
-
-        case 0x26:
-            /* ROL */
-            MN_CPU_ZP_RMW({
-                MN_CPU_ROL(cpu->t);
-            });
-            break;
-
-        case 0x46:
-            /* LSR */
-            MN_CPU_ZP_RMW({
-                MN_CPU_LSR(cpu->t);
-            });
-            break;
-
-        case 0x66:
-            /* ROR */
-            MN_CPU_ZP_RMW({
-                MN_CPU_ROR(cpu->t);
-            });
-            break;
-
-        case 0xC6:
-            /* DEC */
-            MN_CPU_ZP_RMW({
-                cpu->t--;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        case 0xE6:
-            /* INC */
-            MN_CPU_ZP_RMW({
-                cpu->t++;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        /* Zeropage addressing - write instructions */
-
-        case 0x84:
-            /* STY */
-            MN_CPU_ZP_STORE({
-                tmp = cpu->y;
-            });
-            break;
-
-        case 0x85:
-            /* STA */
-            MN_CPU_ZP_STORE({
-                tmp = cpu->a;
-            });
-            break;
-
-        case 0x86:
-            /* STX */
-            MN_CPU_ZP_STORE({
-                tmp = cpu->x;
-            });
-            break;
-
-        /* Indexed zeropage addressing */
-
-        /* Indexed zeropage addressing - read instructions */
-
-        /* Indexed with X */
-
-        case 0x15:
-            /* ORA */
-            MN_CPU_ZPI_READ(cpu->x, {
-                cpu->a |= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x35:
-            /* AND */
-            MN_CPU_ZPI_READ(cpu->x, {
-                cpu->a &= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x55:
-            /* EOR */
-            MN_CPU_ZPI_READ(cpu->x, {
-                cpu->a ^= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x75:
-            /* ADC */
-            MN_CPU_ZPI_READ(cpu->x, {
-                MN_CPU_ADC(tmp);
-            });
-            break;
-
-        case 0xB4:
-            /* LDY */
-            MN_CPU_ZPI_READ(cpu->x, {
-                cpu->y = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        case 0xB5:
-            /* LDA */
-            MN_CPU_ZPI_READ(cpu->x, {
-                cpu->a = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xD5:
-            /* CMP */
-            MN_CPU_ZPI_READ(cpu->x, {
-                MN_CPU_CMP(cpu->a, tmp);
-            });
-            break;
-
-        case 0xF5:
-            /* SBC */
-            MN_CPU_ZPI_READ(cpu->x, {
-                MN_CPU_SBC(tmp);
-            });
-            break;
-
-        /* Indexed with Y */
-
-        case 0xB6:
-            /* LDX */
-            MN_CPU_ZPI_READ(cpu->y, {
-                cpu->x = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        /* Indexed zeropage addressing - RMW instructions */
-
-        case 0x16:
-            /* ASL */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_ASL(cpu->t);
-            });
-            break;
-
-        case 0x36:
-            /* ROL */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_ROL(cpu->t);
-            });
-            break;
-
-        case 0x56:
-            /* LSR */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_LSR(cpu->t);
-            });
-            break;
-
-        case 0x76:
-            /* ROR */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_ROR(cpu->t);
-            });
-            break;
-
-        case 0xD6:
-            /* DEC */
-            MN_CPU_ZPI_RMW({
-                cpu->t--;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        case 0xF6:
-            /* INC */
-            MN_CPU_ZPI_RMW({
-                cpu->t++;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        /* Indexed zeropage addressing - write instructions */
-
-        /* Indexed with X */
-
-        case 0x94:
-            /* STY */
-            MN_CPU_ZPI_STORE(cpu->x, {
-                tmp = cpu->y;
-            });
-            break;
-
-        case 0x95:
-            /* STA */
-            MN_CPU_ZPI_STORE(cpu->x, {
-                tmp = cpu->a;
-            });
-            break;
-
-        /* Indexed with Y */
-
-        case 0x96:
-            /* STX */
-            MN_CPU_ZPI_STORE(cpu->y, {
-                tmp = cpu->x;
-            });
-            break;
-
-        /* Absolute indexed addressing */
-
-        /* Absolute indexed addressing - read instructions */
-
-        /* Indexed with X */
-
-        case 0xBC:
-            /* LDY */
-            MN_CPU_ABSI_READ(cpu->x, {
-                cpu->y = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->y);
-            });
-            break;
-
-        /* Indexed with X or Y */
-
-        case 0x19:
-        case 0x1D:
-            /* ORA */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                cpu->a |= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x39:
-        case 0x3D:
-            /* AND */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                cpu->a &= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x59:
-        case 0x5D:
-            /* EOR */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                cpu->a ^= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x79:
-        case 0x7D:
-            /* ADC */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                MN_CPU_ADC(tmp);
-            });
-            break;
-
-        case 0xB9:
-        case 0xBD:
-            /* LDA */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                cpu->a = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xD9:
-        case 0xDD:
-            /* CMP */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                MN_CPU_CMP(cpu->a, tmp);
-            });
-            break;
-
-        case 0xF9:
-        case 0xFD:
-            /* SBC */
-            MN_CPU_ABSI_READ(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                MN_CPU_SBC(tmp);
-            });
-            break;
-
-        /* Indexed with Y */
-
-        case 0xBE:
-            /* LDX */
-            MN_CPU_ABSI_READ(cpu->y, {
-                cpu->x = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        /* Absolute addressing - RMW instructions */
-
-        case 0x1E:
-            /* ASL */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_ASL(cpu->t);
-            });
-            break;
-
-        case 0x3E:
-            /* ROL */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_ROL(cpu->t);
-            });
-            break;
-
-        case 0x5E:
-            /* LSR */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_LSR(cpu->t);
-            });
-            break;
-
-        case 0x7E:
-            /* ROR */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_ROR(cpu->t);
-            });
-            break;
-
-        case 0xDE:
-            /* DEC */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                cpu->t--;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        case 0xFE:
-            /* INC */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                cpu->t++;
-
-                MN_CPU_UPDATE_NZ(cpu->t);
-            });
-            break;
-
-        /* Absolute addressing - write instructions */
-
-        case 0x99:
-        case 0x9D:
-            /* STA */
-            MN_CPU_ABSI_STORE(cpu->opcode&(1<<2) ? cpu->x : cpu->y, {
-                tmp = cpu->a;
-            });
-            break;
-
-        /* Relative addressing */
-
-        case 0x10:
-            /* BPL */
-            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_N));
-            break;
-
-        case 0x30:
-            /* BMI */
-            MN_CPU_RELATIVE(cpu->p&MN_CPU_N);
-            break;
-
-        case 0x50:
-            /* BVC */
-            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_V));
-            break;
-
-        case 0x70:
-            /* BVS */
-            MN_CPU_RELATIVE(cpu->p&MN_CPU_V);
-            break;
-
-        case 0x90:
-            /* BCC */
-            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_C));
-            break;
-
-        case 0xB0:
-            /* BCS */
-            MN_CPU_RELATIVE(cpu->p&MN_CPU_C);
-            break;
-
-        case 0xD0:
-            /* BNE */
-            MN_CPU_RELATIVE(!(cpu->p&MN_CPU_Z));
-            break;
-
-        case 0xF0:
-            /* BEQ */
-            MN_CPU_RELATIVE(cpu->p&MN_CPU_Z);
-            break;
-
-        /* Indexed indirect addressing */
-
-        /* Indexed indirect addressing - read instructions */
-
-        case 0x01:
-            /* ORA */
-            MN_CPU_IDXIND_READ({
-                cpu->a |= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x21:
-            /* AND */
-            MN_CPU_IDXIND_READ({
-                cpu->a &= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x41:
-            /* EOR */
-            MN_CPU_IDXIND_READ({
-                cpu->a ^= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x61:
-            /* ADC */
-            MN_CPU_IDXIND_READ({
-                MN_CPU_ADC(tmp);
-            });
-            break;
-
-        case 0xA1:
-            /* LDA */
-            MN_CPU_IDXIND_READ({
-                cpu->a = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xC1:
-            /* CMP */
-            MN_CPU_IDXIND_READ({
-                MN_CPU_CMP(cpu->a, tmp);
-            });
-            break;
-
-        case 0xE1:
-            /* SBC */
-            MN_CPU_IDXIND_READ({
-                MN_CPU_SBC(tmp);
-            });
-            break;
-
-        /* Indexed indirect addressing - Write instructions */
-
-        case 0x81:
-            /* STA */
-            MN_CPU_IDXIND_STORE({
-                tmp = cpu->a;
-            });
-            break;
-
-        /* Indirect indexed addressing */
-
-        /* Indirect indexed addressing - Read instructions */
-
-        case 0x11:
-            /* ORA */
-            MN_CPU_INDIDX_READ({
-                cpu->a |= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x31:
-            /* AND */
-            MN_CPU_INDIDX_READ({
-                cpu->a &= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x51:
-            /* EOR */
-            MN_CPU_INDIDX_READ({
-                cpu->a ^= tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x71:
-            /* ADC */
-            MN_CPU_INDIDX_READ({
-                MN_CPU_ADC(tmp);
-            });
-            break;
-
-        case 0xB1:
-            /* LDA */
-            MN_CPU_INDIDX_READ({
-                cpu->a = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xD1:
-            /* CMP */
-            MN_CPU_INDIDX_READ({
-                MN_CPU_CMP(cpu->a, tmp);
-            });
-            break;
-
-        case 0xF1:
-            /* SBC */
-            MN_CPU_INDIDX_READ({
-                MN_CPU_SBC(tmp);
-            });
-            break;
-
-        /* Indirect indexed addressing - write instructions */
-
-        case 0x91:
-            /* STA */
-            MN_CPU_INDIDX_STORE({
-                tmp = cpu->a;
-            });
-            break;
-
-        /* Indirect absolute addressing */
-
-        case 0x6C:
-            /* JMP */
-            switch(cpu->cycle){
-                case 1:
-                    cpu->target_cycle = 5;
-                    break;
-                case 2:
-                    cpu->pc++;
-                    break;
-                case 3:
-                    cpu->tmp = MN_CPU_READ(cpu->pc)<<8;
-                    cpu->tmp |= cpu->t;
-                    cpu->pc++;
-                    break;
-                case 4:
-                    cpu->t = MN_CPU_READ(cpu->tmp);
-                    break;
-                case 5:
-                    cpu->pc = MN_CPU_READ((cpu->tmp&0xFF00)|
-                                          ((cpu->tmp+1)&0xFF))<<8;
-                    cpu->pc |= cpu->t;
-                    break;
-            }
-            break;
-
-        /* Unofficial opcodes */
-
-        /* Implied addressing */
-
-        case 0x1A:
-        case 0x3A:
-        case 0x5A:
-        case 0x7A:
-        case 0xDA:
-        case 0xFA:
-            /* NOP */
-            MN_CPU_IMP({
-                /* Do nothing */
-            });
-            break;
-
-        /* Immediate addressing */
-
-        case 0x80:
-        case 0x82:
-        case 0x89:
-        case 0xC2:
-        case 0xE2:
-            /* NOP */
-            MN_CPU_IMM({
-                /* Do nothing */
-            });
-            break;
-
-        case 0xAB:
-            /* LAX */
-            MN_CPU_IMM({
-                cpu->a = cpu->t;
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x0B:
-        case 0x2B:
-            /* ANC */
-            MN_CPU_IMM({
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-                cpu->p &= ~MN_CPU_C;
-                cpu->p |= (cpu->p>>7)&1;
-            });
-            break;
-
-        case 0x4B:
-            /* ALR */
-            MN_CPU_IMM({
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-                MN_CPU_LSR(cpu->a);
-            });
-            break;
-
-        case 0x6B:
-            /* ARR */
-            /* TODO: Fix this opcode, the overflow flag is incorrect after
-             * execution */
-            MN_CPU_IMM({
-                cpu->a &= cpu->t;
-                tmp = cpu->a;
-                MN_CPU_ROR(cpu->a);
-
-                cpu->p &= ~(1<<7);
-                cpu->p |= cpu->a&(1<<7);
-
-                if(cpu->a) cpu->p &= ~MN_CPU_Z;
-                else cpu->p |= MN_CPU_Z;
-
-                cpu->p &= ~MN_CPU_V;
-                cpu->p |= (tmp^(cpu->a<<1))&(1<<6);
-            });
-            break;
-
-        case 0x8B:
-            /* XAA */
-            /* TODO: Make it a bit broken to be closer to the expected
-             * behaviour :D */
-            MN_CPU_IMM({
-                cpu->a = cpu->x;
-                cpu->a &= cpu->t;
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xCB:
-            /* AXS */
-            MN_CPU_IMM({
-                MN_CPU_CMP(cpu->a&cpu->x, cpu->t);
-                cpu->x = (cpu->a&cpu->x)-cpu->t;
-                MN_CPU_UPDATE_NZ(cpu->x);
-            });
-            break;
-
-        /* Absolute addressing */
-
-        case 0x0C:
-        case 0x3C:
-            /* NOP */
-            MN_CPU_ABS_READ({
-                /* Do nothing */
-            });
-            break;
-
-        case 0xAF:
-            /* LAX */
-            MN_CPU_ABS_READ({
-                /* XXX: Is LAX performing only one or two reads? */
-                cpu->a = tmp;
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x8F:
-            /* SAX */
-            /* NOTE: Apparently it is unstable on the NES */
-            MN_CPU_ABS_STORE({
-                tmp = cpu->a&cpu->x;
-            });
-            break;
-
-        case 0x0F:
-            /* SLO */
-            MN_CPU_ABS_RMW({
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x2F:
-            /* RLA */
-            MN_CPU_ABS_RMW({
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x4F:
-            /* SRE */
-            MN_CPU_ABS_RMW({
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x6F:
-            /* RRA */
-            MN_CPU_ABS_RMW({
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0xCF:
-            /* DCP */
-            MN_CPU_ABS_RMW({
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xEF:
-            /* ISC */
-            MN_CPU_ABS_RMW({
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* Indexed absolute addressing */
-
-        /* With X */
-
-        case 0x1C:
-        case 0x5C:
-        case 0x7C:
-        case 0xDC:
-        case 0xFC:
-            /* NOP */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                /* Do nothing */
-            });
-            break;
-
-        case 0x1F:
-            /* SLO */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x3F:
-            /* RLA */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x5F:
-            /* SRE */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x7F:
-            /* RRA */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0x9C:
-            /* SHY */
-            MN_CPU_ABSI_SH(cpu->x, {
-                tmp = cpu->y;
-                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
-            });
-            break;
-
-        case 0xDF:
-            /* DCP */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xFF:
-            /* ISC */
-            MN_CPU_ABSI_RMW(cpu->x, {
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* With Y */
-
-        case 0x1B:
-            /* SLO */
-            MN_CPU_ABSI_RMW(cpu->y, {
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x3B:
-            /* RLA */
-            MN_CPU_ABSI_RMW(cpu->y, {
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x5B:
-            /* SRE */
-            MN_CPU_ABSI_RMW(cpu->y, {
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x7B:
-            /* RRA */
-            MN_CPU_ABSI_RMW(cpu->y, {
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0x9B:
-            /* TAS */
-            MN_CPU_ABSI_SH(cpu->y, {
-                cpu->s = cpu->a&cpu->x;
-                tmp = cpu->s;
-                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
-            });
-            break;
-
-        case 0x9F:
-            /* AHX */
-            MN_CPU_ABSI_SH(cpu->y, {
-                tmp = cpu->a&cpu->x;
-                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
-            });
-            break;
-
-        case 0x9E:
-            /* SHX */
-            MN_CPU_ABSI_SH(cpu->y, {
-                tmp = cpu->x;
-                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
-            });
-            break;
-
-        case 0xBB:
-            /* LAS */
-            MN_CPU_ABSI_READ(cpu->y, {
-                cpu->a = tmp&cpu->s;
-                cpu->x = cpu->a;
-                cpu->s = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xBF:
-            /* LAX */
-            MN_CPU_ABSI_READ(cpu->y, {
-                cpu->a = tmp;
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xDB:
-            /* DCP */
-            MN_CPU_ABSI_RMW(cpu->y, {
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xFB:
-            /* ISC */
-            MN_CPU_ABSI_RMW(cpu->y, {
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* Zeropage addressing */
-
-        case 0x04:
-        case 0x44:
-        case 0x64:
-            /* NOP */
-            MN_CPU_ZP_READ({
-                /* Do nothing */
-            });
-            break;
-
-        case 0xA7:
-            /* LAX */
-            MN_CPU_ZP_READ({
-                cpu->a = tmp;
-                cpu->x = tmp;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x87:
-            /* SAX */
-            /* NOTE: Apparently it is unstable on the NES */
-            MN_CPU_ZP_STORE({
-                tmp = cpu->a&cpu->x;
-            });
-            break;
-
-        case 0x07:
-            /* SLO */
-            MN_CPU_ZP_RMW({
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x27:
-            /* RLA */
-            MN_CPU_ZP_RMW({
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x47:
-            /* SRE */
-            MN_CPU_ZP_RMW({
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x67:
-            /* RRA */
-            MN_CPU_ZP_RMW({
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0xC7:
-            /* DCP */
-            MN_CPU_ZP_RMW({
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xE7:
-            /* ISC */
-            MN_CPU_ZP_RMW({
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* Indexed zeropage addressing */
-
-        /* With X */
-
-        case 0x14:
-        case 0x34:
-        case 0x54:
-        case 0x74:
-        case 0xD4:
-        case 0xF4:
-            /* NOP */
-            MN_CPU_ZPI_READ(cpu->x, {
-                /* Do nothing */
-            });
-            break;
-
-        case 0x17:
-            /* SLO */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x37:
-            /* RLA */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x57:
-            /* SRE */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x77:
-            /* RRA */
-            MN_CPU_ZPI_RMW({
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0xD7:
-            /* DCP */
-            MN_CPU_ZPI_RMW({
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xF7:
-            /* ISC */
-            MN_CPU_ZPI_RMW({
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* With Y */
-
-        case 0x97:
-            /* SAX */
-            /* NOTE: Apparently it is unstable on the NES */
-            MN_CPU_ZPI_STORE(cpu->y, {
-                tmp = cpu->a&cpu->x;
-            });
-            break;
-
-        case 0xB7:
-            /* LAX */
-            MN_CPU_ZPI_READ(cpu->y, {
-                cpu->a = tmp;
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        /* Indexed indirect addressing */
-
-        case 0x03:
-            /* SLO */
-            MN_CPU_IDXIND_RMW({
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x23:
-            /* RLA */
-            MN_CPU_IDXIND_RMW({
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x43:
-            /* SRE */
-            MN_CPU_IDXIND_RMW({
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x63:
-            /* RRA */
-            MN_CPU_IDXIND_RMW({
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0x83:
-            /* SAX */
-            /* NOTE: Apparently it is unstable on the NES */
-            MN_CPU_IDXIND_STORE({
-                tmp = cpu->a&cpu->x;
-            });
-            break;
-
-        case 0xA3:
-            /* LAX */
-            MN_CPU_IDXIND_READ({
-                cpu->a = tmp;
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xC3:
-            /* DCP */
-            MN_CPU_IDXIND_RMW({
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xE3:
-            /* ISC */
-            MN_CPU_IDXIND_RMW({
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* Indirect indexed addressing */
-
-        case 0x13:
-            /* SLO */
-            MN_CPU_INDIDX_RMW({
-                MN_CPU_ASL(cpu->t);
-                cpu->a |= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x33:
-            /* RLA */
-            MN_CPU_INDIDX_RMW({
-                MN_CPU_ROL(cpu->t);
-                cpu->a &= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x53:
-            /* SRE */
-            MN_CPU_INDIDX_RMW({
-                MN_CPU_LSR(cpu->t);
-                cpu->a ^= cpu->t;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0x73:
-            /* RRA */
-            MN_CPU_INDIDX_RMW({
-                MN_CPU_ROR(cpu->t);
-                MN_CPU_ADC(cpu->t);
-            });
-            break;
-
-        case 0x93:
-            /* AHX */
-            MN_CPU_INDIDX_SH({
-                tmp = cpu->a&cpu->x;
-                if(!cpu->skip_and) tmp &= ((cpu->tmp>>8)+1);
-            });
-            break;
-
-        case 0xB3:
-            /* LAX */
-            MN_CPU_INDIDX_READ({
-                cpu->a = tmp;
-                cpu->x = cpu->a;
-
-                MN_CPU_UPDATE_NZ(cpu->a);
-            });
-            break;
-
-        case 0xD3:
-            /* DCP */
-            MN_CPU_INDIDX_RMW({
-                cpu->t--;
-                MN_CPU_CMP(cpu->a, cpu->t);
-            });
-            break;
-
-        case 0xF3:
-            /* ISC */
-            MN_CPU_INDIDX_RMW({
-                cpu->t++;
-                MN_CPU_SBC(cpu->t);
-            });
-            break;
-
-        /* STP */
-
-        case 0x02:
-        case 0x12:
-        case 0x22:
-        case 0x32:
-        case 0x42:
-        case 0x52:
-        case 0x62:
-        case 0x72:
-        case 0x92:
-        case 0xB2:
-        case 0xD2:
-        case 0xF2:
-            /* STP */
-            /* TODO: Check if I'm emulating it accurately */
-            cpu->jammed = 1;
-            break;
-        default:
-#if 1
-            /* Unknown opcode, jam the CPU for now */
-            cpu->jammed = 1;
-#endif
+    opcode_lut[cpu->opcode](cpu, emu);
+
+    if(cpu->opcode_loaded){
+        cpu->opcode_loaded = 0;
+        goto OPCODE_LOADED;
     }
 
 #if MN_CPU_DEBUG && MN_CPU_CYCLE_DETAIL

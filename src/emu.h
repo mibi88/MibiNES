@@ -72,6 +72,8 @@ typedef struct {
 
     unsigned int is_irq : 1;
 
+    unsigned int opcode_loaded : 1;
+
     /* For SH* opcodes */
     unsigned int skip_and : 1;
 } MNCPU;
