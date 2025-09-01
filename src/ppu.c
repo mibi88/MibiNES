@@ -89,6 +89,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         if((y&MN_PPU_BG_COARSE_Y) == (30<<5)){ \
             /* Reset coarse Y and switch nametable if the bottom of the
              * nametable is reached. */ \
+            y &= ~MN_PPU_BG_COARSE_Y; \
             ppu->v ^= MN_PPU_BG_NAM_Y; \
         } \
         ppu->v &= ~(MN_PPU_BG_FINE_Y|MN_PPU_BG_COARSE_Y); \
