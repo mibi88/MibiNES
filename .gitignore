@@ -2,3 +2,4 @@ build/
 *.nes
 *.pal
 perf.data
+perf.data.old

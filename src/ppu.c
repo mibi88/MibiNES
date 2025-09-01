@@ -155,7 +155,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     }
 
 #define MN_PPU_BG_FETCH(step) \
-    MN_PROF_SCOPE(mn_prof_ppu_bg_fetch, { \
+    MN_PROF(mn_prof_ppu_bg_fetch, { \
         switch((step)&7){ \
             case 0: \
                 if(ppu->cycle != 321) MN_PPU_BG_FETCHES_DONE(); \
@@ -219,7 +219,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     }
 
 #define MN_PPU_BG_GET_PIXEL() \
-    MN_PROF_SCOPE(mn_prof_ppu_bg_get_pixel, { \
+    MN_PROF(mn_prof_ppu_bg_get_pixel, { \
         register unsigned char color; \
         register unsigned char palette; \
  \
@@ -233,7 +233,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     })
 
 #define MN_PPU_DRAW_PIXEL(pixel) \
-    MN_PROF_SCOPE(mn_prof_ppu_draw_pixel, { \
+    MN_PROF(mn_prof_ppu_draw_pixel, { \
         idx = emu->mapper.vram_read(emu, &emu->mapper, \
                                     0x3F00+((pixel)>>2)*4+((pixel)&3)); \
         /* The two upper bytes are not stored */ \
@@ -595,7 +595,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     unsigned char i;
     unsigned char inc = 0;
 
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
     if(ppu->cycle == 257){
         unsigned char i, n;
         printf("[scanline %u] Secondary OAM dump:\n", ppu->scanline);
@@ -617,7 +617,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
             /* XXX: Is this way of handling sprite zero hit accurate enough? */
             ppu->was_sprite0_loaded = ppu->sprite0_loaded;
             ppu->sprite0_loaded = 0;
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
             puts("SPRITE EVALUATION");
 #endif
         }
@@ -637,14 +637,14 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
 
                     ppu->step++;
                     ppu->oamaddr++;
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
                     printf("%03u %03u %u %02x: Sprite in range\n",
                            ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
 #endif
                 }else{
                     ppu->step = 2;
                     ppu->oamaddr += 4;
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
                     printf("%03u %03u %u %02x: Skipping sprite\n",
                            ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
 #endif
@@ -654,7 +654,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                 ppu->oamaddr++;
                 inc = 1;
                 if(!(ppu->oamaddr&3)) ppu->step++;
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
                 printf("%03u %03u %u %02x: Sprite copy\n", ppu->scanline,
                        ppu->y, ppu->step, ppu->oamaddr);
 #endif
@@ -666,7 +666,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                     /* n has overflowed back to 0, all sprites got
                      * evaluated */
                     ppu->step = 4;
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
                     printf("%03u %03u %u %02x: All sprites got evaluated\n",
                            ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
 #endif
@@ -675,7 +675,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                         /* 8 sprites have been found */
                         ppu->entries_read = 0;
                         ppu->step++;
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
                         printf("%03u %03u %u %02x: 8 sprites found!\n",
                                ppu->scanline, ppu->y, ppu->step, ppu->oamaddr);
 #endif
@@ -683,7 +683,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
                         /* Continue copying sprites */
                         ppu->step = 0;
                     }
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
                     printf("%03u %03u %u %02x: Continue\n", ppu->scanline,
                            ppu->y, ppu->step, ppu->oamaddr);
 #endif
@@ -726,7 +726,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
         /* Background pipeline initialization */
     }
 
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
     if(ppu->cycle == 340){
         int i;
         printf("[scanline %u] Sprite FIFO dump:\n", ppu->scanline);
@@ -742,7 +742,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu) {
     if(ppu->cycle >= 1 && ppu->cycle <= 256){
         /* Produce a pixel */
 
-#if MN_PPU_DEBUG_SPRITE_EVAL
+#if MN_CONFIG_PPU_DEBUG_SPRITE_EVAL
         if(ppu->scanline == 195) printf("%u down counter: %u\n", ppu->cycle,
                                         ppu->sprite_fifo[0].down_counter);
 #endif

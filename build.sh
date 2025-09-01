@@ -69,7 +69,7 @@ fi
 
 if [ $prof = true ]; then
     echo "-- Profiling enabled!"
-    cflags+=(-DMN_PROF)
+    cflags+=(-DMN_CONFIG_PROF=1)
 fi
 
 out=$builddir/main

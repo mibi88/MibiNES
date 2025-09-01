@@ -32,13 +32,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if MN_PROF
+#ifndef MN_PROF_H
+#define MN_PROF_H
+
+#if MN_CONFIG_PROF
 
 #include <stdio.h>
 
 typedef unsigned long int counter_t;
 
-#define MN_PROF_SCOPE(counter, scope) \
+#define MN_PROF(counter, scope) \
     { \
         unsigned long mn_gui_get_us(void); \
  \
@@ -58,7 +61,9 @@ void mn_prof_log(void);
 
 #else
 
-#define MN_PROF_SCOPE(name, scope) scope
+#define MN_PROF(name, scope) scope
 #define MN_PROF_LOG()
+
+#endif
 
 #endif

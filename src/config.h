@@ -32,43 +32,28 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <prof.h>
+#ifndef CONFIG_H
+#define CONFIG_H
 
-#if MN_CONFIG_PROF
+/* Build config */
 
-#include <stddef.h>
+#define MN_CONFIG_PPU_DEBUG_SPRITE_EVAL 0
 
-/* Define counters here */
-counter_t mn_prof_ppu_bg_fetch;
-counter_t mn_prof_ppu_bg_get_pixel;
-counter_t mn_prof_ppu_draw_pixel;
+#define MN_CONFIG_CPU_DEBUG             0
+#define MN_CONFIG_CPU_CYCLE_DETAIL      0
+#define MN_CONFIG_CPU_REPORT_POLLING    0
 
-static counter_t *const counters[] = {
-    &mn_prof_ppu_bg_fetch,
-    &mn_prof_ppu_bg_get_pixel,
-    &mn_prof_ppu_draw_pixel,
-    NULL
-};
+#define MN_CONFIG_GUI_CPU_DUMP          0
+#define MN_CONFIG_GUI_PPU_DUMP          0
 
-static char *const counter_names[] = {
-    "BG fetch",
-    "BG get pixel",
-    "Draw pixel",
-    NULL
-};
+#define MN_CONFIG_MAPPER_DEBUG_RW       0
 
-/* Time logging code */
+/* Stuff that gets defined (or not) when compiling */
 
-void mn_prof_log(void) {
-    size_t i;
+#if 0
 
-    fputs("TIME:\n", stderr);
-    for(i=0;counters[i] != NULL && counter_names[i] != NULL;i++){
-        fprintf(stderr, "\033[2K%s\r\033[16C: %lu us\n", counter_names[i],
-                *counters[i]);
-    }
-}
+#define MN_CONFIG_PROF                  0
 
-#else
-typedef int int_t;
+#endif
+
 #endif

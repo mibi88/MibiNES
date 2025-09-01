@@ -42,7 +42,7 @@
 
 #include <stdlib.h>
 
-#if MN_NROM_DEBUG_RW
+#if MN_CONFIG_MAPPER_DEBUG_RW
 #include <stdio.h>
 #endif
 
@@ -124,7 +124,7 @@ static unsigned char mn_nrom_read(void *_emu, void *_mapper,
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     MNEmu *emu = _emu;
 
-#if MN_NROM_DEBUG_RW
+#if MN_CONFIG_MAPPER_DEBUG_RW
     printf("<- %04x\n", addr);
 #endif
 
@@ -159,7 +159,7 @@ static void mn_nrom_write(void *_emu, void *_mapper, unsigned short int addr,
     MNNROM *rom = ((MNMapper*)_mapper)->data;
     MNEmu *emu = _emu;
 
-#if MN_NROM_DEBUG_RW
+#if MN_CONFIG_MAPPER_DEBUG_RW
     printf("*%04x = %02x\n", addr, value);
 #endif
 

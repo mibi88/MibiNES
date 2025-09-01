@@ -140,7 +140,7 @@ static unsigned long mn_gui_get_time(void) {
     return time.tv_nsec/(1e6)+time.tv_sec*1000;
 }
 
-#if MN_PROF
+#if MN_CONFIG_PROF
 unsigned long mn_gui_get_us(void) {
     struct timespec time;
     clock_gettime(CLOCK_REALTIME, &time);
@@ -440,10 +440,10 @@ void mn_gui_free(void) {
     XDestroyWindow(display, window);
     XCloseDisplay(display);
 
-#if MN_GUI_CPU_DUMP
+#if MN_CONFIG_GUI_CPU_DUMP
     MN_GUI_DUMP_CPU();
 #endif
-#if MN_GUI_PPU_DUMP
+#if MN_CONFIG_GUI_PPU_DUMP
     MN_GUI_DUMP_PPU();
 #endif
     MN_PROF_LOG();

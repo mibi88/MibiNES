@@ -34,7 +34,7 @@
 
 #include <cpu.h>
 
-#if MN_CPU_DEBUG
+#if MN_CONFIG_CPU_DEBUG
 /* NOTE: For debugging only */
 #include <stdio.h>
 #endif
@@ -76,12 +76,9 @@ int mn_cpu_init(MNCPU *cpu) {
 }
 
 
-#if MN_CPU_DEBUG && MN_CPU_REPORT_POLLING
-/* TODO: Choose another define name */
-#undef MN_CPU_REPORT_POLLING
+#if MN_CONFIG_CPU_DEBUG && MN_CONFIG_CPU_REPORT_POLLING
 #define MN_CPU_REPORT_POLLING puts("poll");
 #else
-#undef MN_CPU_REPORT_POLLING
 #define MN_CPU_REPORT_POLLING
 #endif
 
@@ -3115,7 +3112,7 @@ void mn_cpu_cycle(MNCPU *cpu, MNEmu *emu) {
     }else if(cpu->cycle > cpu->target_cycle){
         cpu->opcode = MN_CPU_READ(cpu->pc);
 OPCODE_LOADED:
-#if MN_CPU_DEBUG && !MN_CPU_CYCLE_DETAIL
+#if MN_CONFIG_CPU_DEBUG && !MN_CONFIG_CPU_CYCLE_DETAIL
         MN_CPU_OP_INFO();
 #endif
         cpu->cycle = 1;
@@ -3123,7 +3120,7 @@ OPCODE_LOADED:
         if(cpu->execute_int_next){
             cpu->execute_int = 1;
             cpu->execute_int_next = 0;
-#if MN_CPU_DEBUG
+#if MN_CONFIG_CPU_DEBUG
             puts("INT");
 #endif
         }else{
@@ -3182,7 +3179,7 @@ OPCODE_LOADED:
         goto OPCODE_LOADED;
     }
 
-#if MN_CPU_DEBUG && MN_CPU_CYCLE_DETAIL
+#if MN_CONFIG_CPU_DEBUG && MN_CONFIG_CPU_CYCLE_DETAIL
     printf("c: %d ", cpu->cycle);
     MN_CPU_OP_INFO();
 #endif

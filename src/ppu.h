@@ -37,9 +37,7 @@
 
 #include <emu.h>
 
-#define MN_PPU_DEBUG_FETCH 0
-#define MN_PPU_DEBUG_PIXEL 0
-#define MN_PPU_DEBUG_SPRITE_EVAL 0
+#include <config.h>
 
 enum {
     MN_PPU_CTRL,
