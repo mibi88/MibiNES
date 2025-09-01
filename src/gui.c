@@ -141,10 +141,10 @@ static unsigned long mn_gui_get_time(void) {
 }
 
 #if MN_CONFIG_PROF
-unsigned long mn_gui_get_us(void) {
+unsigned long mn_gui_get_ns(void) {
     struct timespec time;
     clock_gettime(CLOCK_REALTIME, &time);
-    return time.tv_nsec/1000+time.tv_sec*(int)1e6;
+    return time.tv_nsec+time.tv_sec*(unsigned long int)1e9;
 }
 #endif
 
@@ -239,6 +239,8 @@ int mn_gui_init(unsigned char *rom, unsigned char *palette, size_t size) {
 
     x = 0;
     y = 0;
+
+    MN_PROF_INIT();
 
     return 0;
 }

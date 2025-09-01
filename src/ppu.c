@@ -272,7 +272,7 @@ unsigned char mn_ppu_sprites(MNPPU *ppu, MNEmu *emu);
  * 2  pixels down
  *
  */
-void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
+void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) MN_PROF(mn_prof_ppu_cycle, {
     MNCPU *cpu = &emu->cpu;
     unsigned char bg_pixel;
     unsigned char sprite_pixel;
@@ -304,7 +304,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
         if(ppu->mask&MN_PPU_MASK_RENDER){
             /* Visible scanlines or pre-render scanline */
 
-            bg_pixel = mn_ppu_bg(ppu, emu);
+            MN_PROF(mn_prof_ppu_bg, {
+                bg_pixel = mn_ppu_bg(ppu, emu);
+            });
 
             if(ppu->cycle == 257){
                 /* Copy some bits of t to v */
@@ -323,7 +325,9 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
                     ppu->v |= ppu->t&MN_PPU_BG_Y_BITS;
                 }
             }else{
-                sprite_pixel = mn_ppu_sprites(ppu, emu);
+                MN_PROF(mn_prof_ppu_oam, {
+                    sprite_pixel = mn_ppu_sprites(ppu, emu);
+                });
 
                 if(ppu->cycle >= 1 && ppu->cycle <= 256){
 
@@ -389,13 +393,15 @@ void mn_ppu_cycle(MNPPU *ppu, MNEmu *emu) {
 
     /* Let the CPU run all 3 PPU cycles */
     if(ppu->cycles_since_cpu_cycle >= 3){
-        mn_cpu_cycle(&emu->cpu, emu);
+        MN_PROF(mn_prof_cpu_cycle, {
+            mn_cpu_cycle(&emu->cpu, emu);
+        });
         mn_dma_cycle(&emu->dma, emu);
         ppu->cycles_since_cpu_cycle = 0;
     }
 
     ppu->cycles_since_cpu_cycle++;
-}
+})
 
 unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
     unsigned char pixel = 0;

@@ -39,32 +39,84 @@
 #include <stddef.h>
 
 /* Define counters here */
+
+counter_t mn_prof_emu_step;
+
+counter_t mn_prof_cpu_cycle;
+
+counter_t mn_prof_ppu_cycle;
+
+counter_t mn_prof_ppu_bg;
+counter_t mn_prof_ppu_oam;
+
 counter_t mn_prof_ppu_bg_fetch;
 counter_t mn_prof_ppu_bg_get_pixel;
 counter_t mn_prof_ppu_draw_pixel;
 
 static counter_t *const counters[] = {
+    &mn_prof_emu_step,
+
+    &mn_prof_cpu_cycle,
+
+    &mn_prof_ppu_cycle,
+
+    &mn_prof_ppu_bg,
+
     &mn_prof_ppu_bg_fetch,
     &mn_prof_ppu_bg_get_pixel,
+
+    &mn_prof_ppu_oam,
+
     &mn_prof_ppu_draw_pixel,
     NULL
 };
 
 static char *const counter_names[] = {
-    "BG fetch",
-    "BG get pixel",
+    "Emu step",
+
+    "CPU cycle",
+
+    "PPU cycle",
+
+    "PPU BG",
+
+    "PPU BG fetch",
+    "PPU BG get pixel",
+
+    "PPU OAM",
+
     "Draw pixel",
     NULL
 };
+
+/* Initialization code */
+
+static counter_t start;
+
+unsigned long mn_gui_get_ns(void);
+
+void mn_prof_init(void) {
+    start = mn_gui_get_ns();
+}
 
 /* Time logging code */
 
 void mn_prof_log(void) {
     size_t i;
 
+    unsigned long int ns = mn_gui_get_ns()-start;
+
+    fprintf(stderr, "Total time: %lu ns\n", ns);
+
+    if(sizeof(counter_t) < 6){
+        fputs("Warning: durations shown below might be incorrect as overflows "
+              "can happen easily due to the size of counter_t!\n", stderr);
+    }
+
     fputs("TIME:\n", stderr);
     for(i=0;counters[i] != NULL && counter_names[i] != NULL;i++){
-        fprintf(stderr, "\033[2K%s\r\033[16C: %lu us\n", counter_names[i],
+        fprintf(stderr, "\033[2K%s\r\033[16C: %05.02f%% %lu ns\n",
+                counter_names[i], (double)*counters[i]/(double)ns*100,
                 *counters[i]);
     }
 }

@@ -41,6 +41,8 @@
 
 #include <ctrl.h>
 
+#include <prof.h>
+
 int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
                 unsigned char player1_input(), unsigned char player2_input(),
                 MNCtrl ctrl1_type, MNCtrl ctrl2_type, unsigned char *rom,
@@ -80,11 +82,11 @@ int mn_emu_init(MNEmu *emu, void draw_pixel(long int color),
     return MN_EMU_E_NONE;
 }
 
-void mn_emu_step(MNEmu *emu) {
+void mn_emu_step(MNEmu *emu) MN_PROF(mn_prof_emu_step, {
     mn_ppu_cycle(&emu->ppu, emu);
     mn_ctrl_cycle(&emu->ctrl1, emu);
     mn_ctrl_cycle(&emu->ctrl2, emu);
-}
+})
 
 void mn_emu_cycle(MNEmu *emu) {
     /* TODO: Perform the right number of steps */

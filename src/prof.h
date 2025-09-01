@@ -43,18 +43,21 @@ typedef unsigned long int counter_t;
 
 #define MN_PROF(counter, scope) \
     { \
-        unsigned long mn_gui_get_us(void); \
+        unsigned long mn_gui_get_ns(void); \
  \
         counter_t start; \
         counter_t end; \
         extern counter_t counter; \
  \
-        start = mn_gui_get_us(); \
+        start = mn_gui_get_ns(); \
         scope; \
-        end = mn_gui_get_us(); \
+        end = mn_gui_get_ns(); \
  \
         counter += end-start; \
     }
+
+void mn_prof_init(void);
+#define MN_PROF_INIT() mn_prof_init()
 
 void mn_prof_log(void);
 #define MN_PROF_LOG() mn_prof_log()
