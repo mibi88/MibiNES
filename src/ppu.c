@@ -70,42 +70,34 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
 #define MN_PPU_BG_NAM_Y    0x800
 
 #define MN_PPU_BG_COARSE_X_INC() \
-    { \
+    MN_PROF(mn_prof_ppu_bg_c_x_inc, { \
         register unsigned char x = ((ppu->v&MN_PPU_BITS(5))+1); \
         ppu->v &= ~MN_PPU_BG_COARSE_X; \
         ppu->v |= x&MN_PPU_BG_COARSE_X; \
         /* Switch nametable on overflow */ \
-        if(x&(1<<5)) ppu->v ^= MN_PPU_BG_NAM_X; \
-    }
+        ppu->v ^= (x&(1<<5))<<5; \
+    })
 
 #if 1
+/* XXX: Is this new version faster? If not, revert to the previous version. */
 #define MN_PPU_BG_Y_INC() \
-    { \
+    MN_PROF(mn_prof_ppu_bg_y_inc, { \
         /* See https://www.nesdev.org/wiki/PPU_scrolling#Y_increment */ \
-        if((ppu->v&MN_PPU_BG_FINE_Y) != MN_PPU_BG_FINE_Y){ \
-            /* Increment fine Y */ \
-            ppu->v += (1<<12); \
-        }else{ \
-            /* Reset fine Y */ \
-            ppu->v &= ~MN_PPU_BG_FINE_Y; \
-            if((ppu->v&MN_PPU_BG_COARSE_Y) == (29<<5)){ \
-                /* Reset coarse Y and switch nametable if the bottom of the
-                 * nametable is reached. */ \
-                ppu->v &= ~MN_PPU_BG_COARSE_Y; \
-                ppu->v ^= MN_PPU_BG_NAM_Y; \
-            }else if((ppu->v&(31<<5)) == (31<<5)){ \
-                /* Reset coarse Y on overflow but do not switch nametable */ \
-                ppu->v &= ~MN_PPU_BG_COARSE_Y; \
-            }else{ \
-                /* Increase coarse Y */ \
-                ppu->v += 1<<5; \
-            } \
+        register unsigned short int y = ppu->v; \
+        y += (1<<12); \
+        y += (y&(1<<15))>>10; \
+        if((y&MN_PPU_BG_COARSE_Y) == (30<<5)){ \
+            /* Reset coarse Y and switch nametable if the bottom of the
+             * nametable is reached. */ \
+            ppu->v ^= MN_PPU_BG_NAM_Y; \
         } \
-    }
+        ppu->v &= ~(MN_PPU_BG_FINE_Y|MN_PPU_BG_COARSE_Y); \
+        ppu->v |= y&(MN_PPU_BG_FINE_Y|MN_PPU_BG_COARSE_Y); \
+    })
 #else
 
 #define MN_PPU_BG_Y_INC() \
-    { \
+    MN_PROF(mn_prof_ppu_bg_y_inc, { \
         /* See https://www.nesdev.org/wiki/PPU_scrolling#Y_increment
          * This is the exact same algorithm that's on the NesDev wiki, to debug
          * my code above. */ \
@@ -125,13 +117,13 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
             } \
             ppu->v = (ppu->v&~0x03E0)|(y<<5); \
         } \
-    }
+    })
 #endif
 
 #define MN_PPU_BG_ATTR_START_BIT (((ppu->v)&2)+((ppu->v>>4)&4))
 
 #define MN_PPU_BG_FILL_SHIFT_REGS() \
-    { \
+    MN_PROF(mn_prof_ppu_bg_fill_regs, { \
         /* The NesDev wiki says that the bitplanes go into the upper 8 bits of
          * the shift registers, but the diagram on the same page of the wiki
          * and people on the NesDev Discord say that the shift registers shift
@@ -143,7 +135,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
  \
         ppu->attr_latch1 = ppu->attr>>MN_PPU_BG_ATTR_START_BIT; \
         ppu->attr_latch2 = ppu->attr>>MN_PPU_BG_ATTR_START_BIT>>1; \
-    }
+    })
 
 #define MN_PPU_BG_FETCHES_DONE() \
     { \
@@ -204,7 +196,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     })
 
 #define MN_PPU_BG_SHIFT() \
-    { \
+    MN_PROF(mn_prof_ppu_bg_shift, { \
         /* Shift the shift registers */ \
         ppu->low_shift <<= 1; \
         ppu->low_shift |= 1; \
@@ -216,7 +208,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
  \
         ppu->attr2_shift <<= 1; \
         ppu->attr2_shift |= ppu->attr_latch2; \
-    }
+    })
 
 #define MN_PPU_BG_GET_PIXEL() \
     MN_PROF(mn_prof_ppu_bg_get_pixel, { \
@@ -412,9 +404,7 @@ unsigned char mn_ppu_bg(MNPPU *ppu, MNEmu *emu) {
         MN_PPU_BG_SHIFT();
     }else if(ppu->cycle >= 1 && ppu->cycle <= 256){
         MN_PPU_BG_FETCH(ppu->cycle-1);
-    }
-
-    if(ppu->cycle >= 337 && ppu->cycle <= 340){
+    }else if(ppu->cycle >= 337 && ppu->cycle <= 340){
         /* Dummy nametable fetches */
         switch((ppu->cycle-337)&3){
             case 0:

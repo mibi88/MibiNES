@@ -65,6 +65,7 @@ void mn_prof_log(void);
 #else
 
 #define MN_PROF(name, scope) scope
+#define MN_PROF_INIT()
 #define MN_PROF_LOG()
 
 #endif

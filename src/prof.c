@@ -47,10 +47,16 @@ counter_t mn_prof_cpu_cycle;
 counter_t mn_prof_ppu_cycle;
 
 counter_t mn_prof_ppu_bg;
-counter_t mn_prof_ppu_oam;
 
 counter_t mn_prof_ppu_bg_fetch;
 counter_t mn_prof_ppu_bg_get_pixel;
+counter_t mn_prof_ppu_bg_c_x_inc;
+counter_t mn_prof_ppu_bg_y_inc;
+counter_t mn_prof_ppu_bg_fill_regs;
+counter_t mn_prof_ppu_bg_shift;
+
+counter_t mn_prof_ppu_oam;
+
 counter_t mn_prof_ppu_draw_pixel;
 
 static counter_t *const counters[] = {
@@ -64,6 +70,10 @@ static counter_t *const counters[] = {
 
     &mn_prof_ppu_bg_fetch,
     &mn_prof_ppu_bg_get_pixel,
+    &mn_prof_ppu_bg_c_x_inc,
+    &mn_prof_ppu_bg_y_inc,
+    &mn_prof_ppu_bg_fill_regs,
+    &mn_prof_ppu_bg_shift,
 
     &mn_prof_ppu_oam,
 
@@ -82,6 +92,10 @@ static char *const counter_names[] = {
 
     "PPU BG fetch",
     "PPU BG get pixel",
+    "PPU BG c. X inc",
+    "PPU BG Y inc",
+    "PPU BG fill regs",
+    "PPU BG shift",
 
     "PPU OAM",
 
@@ -96,7 +110,13 @@ static counter_t start;
 unsigned long mn_gui_get_ns(void);
 
 void mn_prof_init(void) {
+    size_t i;
+
     start = mn_gui_get_ns();
+
+    for(i=0;counters[i] != NULL;i++){
+        *counters[i] = 0;
+    }
 }
 
 /* Time logging code */
