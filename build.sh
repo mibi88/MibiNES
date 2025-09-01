@@ -44,20 +44,32 @@ cflags=(-ansi -Wall -Wextra -Wpedantic -I$srcdir)
 ldflags=(-lX11)
 
 debug=false
+prof=false
 
-while getopts "d" flag; do
+help="USAGE: $0 [-d] [-p]\n\nOptions:\n-d  Debug build\n-p  Profiling build"
+
+while getopts "dph" flag; do
     case "${flag}" in
         d) debug=true ;;
+        p) prof=true ;;
+        h) echo -e ${help[@]}
+           exit 0 ;;
     esac
 done
 
 if [ $debug = true ]; then
     echo "-- Debug build..."
     cflags+=(-O0 -g)
+    ldflags+=(-g)
 else
     echo "-- Release build..."
     cflags+=(-O3)
     ldflags+=(-flto=auto)
+fi
+
+if [ $prof = true ]; then
+    echo "-- Profiling enabled!"
+    cflags+=(-DMN_PROF)
 fi
 
 out=$builddir/main

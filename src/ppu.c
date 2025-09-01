@@ -39,6 +39,8 @@
 
 #include <stdio.h>
 
+#include <prof.h>
+
 int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                 void draw_pixel(long int color)) {
     /* TODO */
@@ -153,8 +155,8 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     }
 
 #define MN_PPU_BG_FETCH(step) \
-    { \
-        switch((step)%8){ \
+    MN_PROF_SCOPE(mn_prof_ppu_bg_fetch, { \
+        switch((step)&7){ \
             case 0: \
                 if(ppu->cycle != 321) MN_PPU_BG_FETCHES_DONE(); \
  \
@@ -199,7 +201,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                                           ppu->addr)); \
                 break; \
         } \
-    }
+    })
 
 #define MN_PPU_BG_SHIFT() \
     { \
@@ -217,7 +219,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
     }
 
 #define MN_PPU_BG_GET_PIXEL() \
-    { \
+    MN_PROF_SCOPE(mn_prof_ppu_bg_get_pixel, { \
         register unsigned char color; \
         register unsigned char palette; \
  \
@@ -228,10 +230,10 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
                   (((ppu->attr2_shift>>(7-ppu->x))&1)<<1); \
  \
         pixel = color|(palette<<2); \
-    }
+    })
 
 #define MN_PPU_DRAW_PIXEL(pixel) \
-    { \
+    MN_PROF_SCOPE(mn_prof_ppu_draw_pixel, { \
         idx = emu->mapper.vram_read(emu, &emu->mapper, \
                                     0x3F00+((pixel)>>2)*4+((pixel)&3)); \
         /* The two upper bytes are not stored */ \
@@ -242,7 +244,7 @@ int mn_ppu_init(MNPPU *ppu, unsigned char *palette,
         ppu->draw_pixel((ppu->palette[0x40*(ppu->mask>>5)+idx*3]<<16)| \
                         (ppu->palette[0x40*(ppu->mask>>5)+idx*3+1]<<8)| \
                         ppu->palette[0x40*(ppu->mask>>5)+idx*3+2]); \
-    }
+    })
 
 #define MN_PPU_INC_CYCLE() \
     { \

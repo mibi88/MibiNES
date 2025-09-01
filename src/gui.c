@@ -45,10 +45,48 @@
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 
+#include <prof.h>
+
 #define W 256
 #define H 240
 
 #define BUTTON_NUM 8
+
+#define MN_GUI_DUMP_CPU() \
+    { \
+        size_t i, n; \
+        fputs("CPU MEM Dump:\n", stderr); \
+        for(i=0;i<0x1000;i+=0x10){ \
+            fprintf(stderr, "%04lx: ", i); \
+            for(n=0;n<0x10;n++){ \
+                fprintf(stderr, "%02x ", emu.mapper.read(&emu, \
+                        &emu.mapper, i+n)); \
+            } \
+            fputs("\n", stderr); \
+        } \
+    }
+
+#define MN_GUI_DUMP_PPU() \
+    { \
+        size_t i, n; \
+        fputs("PPU MEM Dump:\n", stderr); \
+        for(i=0;i<0x4000;i+=0x10){ \
+            fprintf(stderr, "%04lx: ", i); \
+            for(n=0;n<0x10;n++){ \
+                fprintf(stderr, "%02x ", emu.mapper.vram_read(&emu, \
+                        &emu.mapper, i+n)); \
+            } \
+            fputs("\n", stderr); \
+        } \
+        fputs("PPU primary OAM Dump:\n", stderr); \
+        for(i=0;i<0x100;i+=4){ \
+            fprintf(stderr, "%04lx: ", i); \
+            for(n=0;n<4;n++){ \
+                fprintf(stderr, "%02x ", emu.ppu.primary_oam[i+n]); \
+            } \
+            fputs("\n", stderr); \
+        } \
+    }
 
 static Display *display;
 static Window root;
@@ -101,6 +139,14 @@ static unsigned long mn_gui_get_time(void) {
     clock_gettime(CLOCK_REALTIME, &time);
     return time.tv_nsec/(1e6)+time.tv_sec*1000;
 }
+
+#if MN_PROF
+unsigned long mn_gui_get_us(void) {
+    struct timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
+    return time.tv_nsec/1000+time.tv_sec*(int)1e6;
+}
+#endif
 
 static unsigned char mn_gui_player1_buttons(void) {
     return buttons1;
@@ -388,45 +434,17 @@ void mn_gui_run(void) {
             }
         }
     }
-#if MN_GUI_CPU_DUMP
-    {
-        size_t i, n;
-        puts("CPU MEM Dump:");
-        for(i=0;i<0x1000;i+=0x10){
-            printf("%04lx: ", i);
-            for(n=0;n<0x10;n++){
-                printf("%02x ", emu.mapper.read(&emu,
-                       &emu.mapper, i+n));
-            }
-            puts("");
-        }
-    }
-#endif
-#if MN_GUI_PPU_DUMP
-    {
-        size_t i, n;
-        puts("PPU MEM Dump:");
-        for(i=0;i<0x4000;i+=0x10){
-            printf("%04lx: ", i);
-            for(n=0;n<0x10;n++){
-                printf("%02x ", emu.mapper.vram_read(&emu,
-                       &emu.mapper, i+n));
-            }
-            puts("");
-        }
-        puts("PPU primary OAM Dump:");
-        for(i=0;i<0x100;i+=4){
-            printf("%04lx: ", i);
-            for(n=0;n<4;n++){
-                printf("%02x ", emu.ppu.primary_oam[i+n]);
-            }
-            puts("");
-        }
-    }
-#endif
 }
 
 void mn_gui_free(void) {
     XDestroyWindow(display, window);
     XCloseDisplay(display);
+
+#if MN_GUI_CPU_DUMP
+    MN_GUI_DUMP_CPU();
+#endif
+#if MN_GUI_PPU_DUMP
+    MN_GUI_DUMP_PPU();
+#endif
+    MN_PROF_LOG();
 }
